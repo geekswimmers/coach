@@ -1,5 +1,5 @@
 [package]
-name = "GeekSwimmers Coach"
+name = "coach"
 version = "0.1.0"
 edition = "2021"
 authors = ["Hildeberto Mendonca <me@hildeberto.com>"]
