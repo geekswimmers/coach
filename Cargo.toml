@@ -13,6 +13,5 @@ config = "0.14.0"
 lazy_static = "1.4.0"
 tera = "1"
 chrono = { version = "0.4.24",  features = ["serde"] }
-sqlx =   { version = "0.7.3",   features = ["runtime-tokio-rustls", "macros", "postgres", "uuid", "chrono", "migrate"], default-features = false }
 serde =  { version = "1.0.197", features = ["derive"] }
 tokio =  { version = "1.36.0",  features = ["macros", "rt-multi-thread"] }
