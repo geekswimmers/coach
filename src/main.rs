@@ -7,7 +7,7 @@ async fn main() {
     println!("Database URL: {}", config.database.url);
     let pool = PgPool::connect(&config.database.url).await.expect("Failed to connect to database");
 
-    if !pool.is_closed() {
-        println!("Established connection to the database");
-    }
+    sqlx::migrate!("storage/migrations")
+        .run(&pool)
+        .await.expect("Failed to migrate database");
 }
