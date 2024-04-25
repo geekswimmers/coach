@@ -1,0 +1,27 @@
+html {
+    scroll-behavior: smooth;
+}
+
+body {
+    padding-top: 75px;
+    padding-bottom: 75px;
+    background-color: rgb(255, 255, 255);
+}
+
+label {
+    font-weight: bold;
+}
+
+.error {
+    color: red;
+}
+
+.success {
+    color: green;
+}
+
+.article-content {
+    font-family: "Gafata", sans-serif;
+    font-weight: 400;
+    font-size: 15pt;
+}
