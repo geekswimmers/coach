@@ -7,7 +7,7 @@ use actix_multipart::form::MultipartForm;
 use actix_web::{web, App, Error, HttpResponse, HttpServer, Responder};
 use coach::config::load_config;
 use sqlx::postgres::PgPool;
-use std::env;
+use std::io;
 use tera::{Context, Tera};
 
 lazy_static! {
@@ -31,14 +31,29 @@ struct UploadForm {
 }
 
 async fn save_files(MultipartForm(form): MultipartForm<UploadForm>) -> Result<impl Responder, Error> {
-    let temp_dir = env::temp_dir();
-    for f in form.files {
-        let path = format!("{}/{}", temp_dir.display(), f.file_name.unwrap());
-        println!("Saving to {}", path);
-        f.file.persist(path).unwrap();
+    for csv_file in form.files {
+        let reader = io::BufReader::new(csv_file.file);
+        let mut csv_reader = csv::ReaderBuilder::new()
+            .has_headers(true)
+            .from_reader(reader);
+
+        for record in csv_reader.records() {
+            match record {
+                Ok(row) => import_row(&row),
+                Err(e) => println!("Error: {}", e)
+            }
+            println!()
+        }
     }
 
     Ok(HttpResponse::Ok())
+}
+
+fn import_row(row: &csv::StringRecord) {
+    print!("{} - ", row.get(0).unwrap());
+    for column in row { 
+        print!("{} ", column)
+    }
 }
 
 async fn home_view() -> impl Responder {
@@ -52,14 +67,13 @@ async fn home_view() -> impl Responder {
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     let config = load_config().expect("Failed to load config");
-    println!("Database URL: {}", config.database.url);
     let pool = PgPool::connect(&config.database.url).await.expect("Failed to connect to database");
 
     sqlx::migrate!("storage/migrations")
         .run(&pool)
         .await.expect("Failed to migrate database");
 
-        HttpServer::new(move || {
+    HttpServer::new(move || {
             App::new()
                 .service(fs::Files::new("/static", "./static").show_files_listing())
                 .route("/", web::get().to(home_view))
