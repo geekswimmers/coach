@@ -38,10 +38,6 @@ async fn import_meet_entries(conn: web::Data<PgPool>, MultipartForm(form): Multi
             .has_headers(true)
             .from_reader(reader);
 
-        sqlx::query("delete from swimmer")
-            .execute(conn.get_ref())
-            .await.expect("Error cleaning swimmers");
-
         for (i, record) in csv_reader.records().enumerate() {
             match record {
                 Ok(row) => import_row(conn.get_ref(), &row, i).await,
@@ -72,6 +68,7 @@ async fn import_row(conn: &PgPool, row: &csv::StringRecord, row_num: usize) {
     sqlx::query!("
             insert into swimmer (id_external, name_first, name_last, gender, birth_date) 
             values ($1, $2, $3, $4, $5)
+            on conflict do nothing
         ", swimmer_id, first_name, last_name, gender, birth_date)
         .execute(conn)
         .await.expect("Error inserting a swimmer");
