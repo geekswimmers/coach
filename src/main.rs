@@ -6,9 +6,11 @@ use actix_multipart::form::tempfile::TempFile;
 use actix_multipart::form::MultipartForm;
 use actix_web::{web, App, Error, HttpResponse, HttpServer, Responder};
 use coach::config::load_config;
-use chrono::NaiveDate;
+use chrono::{NaiveDate, ParseError};
 use sqlx::postgres::PgPool;
+use std::collections::HashSet;
 use std::io;
+use std::time::{Duration, Instant};
 use tera::{Context, Tera};
 
 lazy_static! {
@@ -33,27 +35,39 @@ struct UploadForm {
 
 async fn import_meet_entries(conn: web::Data<PgPool>, MultipartForm(form): MultipartForm<UploadForm>) -> Result<impl Responder, Error> {
     for csv_file in form.files {
+        let now = Instant::now();
         let reader = io::BufReader::new(csv_file.file);
         let mut csv_reader = csv::ReaderBuilder::new()
             .has_headers(true)
             .from_reader(reader);
 
+        println!("Started importing meet entries.");
+        let mut swimmers = HashSet::new();
+        let mut num_entries = 0;
         for (i, record) in csv_reader.records().enumerate() {
             match record {
                 Ok(row) => {
-                    import_swimmer(conn.get_ref(), &row, i).await;
+                    match import_swimmer(conn.get_ref(), &row, i).await {
+                        Ok(swimmer_id) => {
+                            let _b = swimmers.insert(swimmer_id);
+                        },
+                        Err(e) => println!("Error importing swimmer: {}", e)
+                    };
                     import_times(conn.get_ref(), &row, i).await;
+                    num_entries += 1;
                 }
                 Err(e) => println!("Error: {}", e)
             }
         }
-        println!("Finished importing swimmers.")
+        let elapsed = now.elapsed();
+        register_load(conn.get_ref(), swimmers, num_entries, elapsed).await;
+        println!("Finished importing meet entries.")
     }
 
     Ok(HttpResponse::Ok())
 }
 
-async fn import_swimmer(conn: &PgPool, row: &csv::StringRecord, row_num: usize) {
+async fn import_swimmer(conn: &PgPool, row: &csv::StringRecord, row_num: usize) -> Result<String, ParseError> {
     let swimmer_id = row.get(0).unwrap();
     let full_name = row.get(4).unwrap();
     let last_name = full_name.split(" ").nth(0);
@@ -64,7 +78,7 @@ async fn import_swimmer(conn: &PgPool, row: &csv::StringRecord, row_num: usize) 
         Ok(dt) => dt,
         Err(e) => {
             println!("Error decoding date of birth at line {}: {}", row_num + 1, e);
-            return
+            return Err(e)
         }
     };
     
@@ -75,6 +89,8 @@ async fn import_swimmer(conn: &PgPool, row: &csv::StringRecord, row_num: usize) 
        ", swimmer_id, first_name, last_name, gender, birth_date)
         .execute(conn)
         .await.expect("Error inserting a swimmer");
+
+    return Ok(swimmer_id.to_string())
 }
 
 async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize) {
@@ -102,7 +118,6 @@ async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize) {
     };
 
     if !best_time_short.is_empty() {
-        println!("BTS: {}", best_time_short);
         let best_time_minute = best_time_short.split(":").nth(0).unwrap().parse::<i32>().unwrap();
         let best_time_second = best_time_short
             .split(":").nth(1).unwrap()
@@ -138,7 +153,6 @@ async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize) {
         },
         None => return,
     };
-    println!("BTL: {}", best_time_long);
     let best_time_minute = best_time_long.split(":").nth(0).unwrap().parse::<i32>().unwrap();
     let best_time_second = best_time_long
         .split(":").nth(1).unwrap()
@@ -160,6 +174,23 @@ async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize) {
             values ($1, $2, $3, $4, $5, $6)
             on conflict do nothing
         ", swimmer_id, style, distance, "LONG", best_time, best_time_long_date)
+        .execute(conn)
+        .await.expect("Error inserting a swimmer");
+}
+
+async fn register_load(conn: &PgPool, swimmers: HashSet<String>, num_entries: i32, duration: Duration) {
+    let num_swimmers = swimmers.len() as i32;
+    let mut ss: String = String::new();
+    let mut sep: String = "".to_string();
+    for swimmer in swimmers {
+        ss.push_str(format!("{}{}", sep, swimmer).as_str());
+        sep = ", ".to_string();
+    }
+
+    sqlx::query!("
+            insert into entries_load (num_swimmers, num_entries, duration, swimmers)
+            values ($1, $2, $3, $4)
+        ", num_swimmers, num_entries, duration.as_millis() as i32, ss)
         .execute(conn)
         .await.expect("Error inserting a swimmer");
 }
