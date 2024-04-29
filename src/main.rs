@@ -40,7 +40,10 @@ async fn import_meet_entries(conn: web::Data<PgPool>, MultipartForm(form): Multi
 
         for (i, record) in csv_reader.records().enumerate() {
             match record {
-                Ok(row) => import_row(conn.get_ref(), &row, i).await,
+                Ok(row) => {
+                    import_swimmer(conn.get_ref(), &row, i).await;
+                    import_times(conn.get_ref(), &row, i).await;
+                }
                 Err(e) => println!("Error: {}", e)
             }
         }
@@ -50,7 +53,7 @@ async fn import_meet_entries(conn: web::Data<PgPool>, MultipartForm(form): Multi
     Ok(HttpResponse::Ok())
 }
 
-async fn import_row(conn: &PgPool, row: &csv::StringRecord, row_num: usize) {
+async fn import_swimmer(conn: &PgPool, row: &csv::StringRecord, row_num: usize) {
     let swimmer_id = row.get(0).unwrap();
     let full_name = row.get(4).unwrap();
     let last_name = full_name.split(" ").nth(0);
@@ -66,10 +69,97 @@ async fn import_row(conn: &PgPool, row: &csv::StringRecord, row_num: usize) {
     };
     
     sqlx::query!("
-            insert into swimmer (id_external, name_first, name_last, gender, birth_date) 
+            insert into swimmer (id, name_first, name_last, gender, birth_date) 
             values ($1, $2, $3, $4, $5)
             on conflict do nothing
-        ", swimmer_id, first_name, last_name, gender, birth_date)
+       ", swimmer_id, first_name, last_name, gender, birth_date)
+        .execute(conn)
+        .await.expect("Error inserting a swimmer");
+}
+
+async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize) {
+    let swimmer_id = row.get(0).unwrap();
+    let event = row.get(9).unwrap();
+    let distance: i32 = event.split(" ").nth(0).unwrap().parse().unwrap();
+    let style = match event.split(" ").last().unwrap() {
+        "Fr" => "FREESTYLE",
+        "Bk" => "BACKSTROKE",
+        "Br" => "BREASTSTROKE",
+        "FL" => "BUTTERFLY",
+        "I.M" => "MEDLEY",
+        &_ => "",
+    };
+
+    let best_time_short = match row.get(12) {
+        Some(time) => {
+            if time.is_empty() || time == "" {
+                ""
+            } else {
+                &time[..8]
+            }
+        },
+        None => return,
+    };
+
+    if !best_time_short.is_empty() {
+        println!("BTS: {}", best_time_short);
+        let best_time_minute = best_time_short.split(":").nth(0).unwrap().parse::<i32>().unwrap();
+        let best_time_second = best_time_short
+            .split(":").nth(1).unwrap()
+            .split(".").nth(0).unwrap()
+            .parse::<i32>().unwrap();
+        let best_time_milisecond = best_time_short.split(".").last().unwrap().parse::<i32>().unwrap();
+        let best_time: i32 = best_time_minute * 60000 + best_time_second * 1000 + best_time_milisecond * 10;
+
+        let best_time_short_date = match NaiveDate::parse_from_str(row.get(13).unwrap(), "%b-%d-%y") {
+            Ok(dt) => dt,
+            Err(e) => {
+                println!("Error decoding best time date at line {}: {}", row_num + 1, e);
+                return
+            }
+        };
+
+        sqlx::query!("
+                insert into swimmer_time (swimmer, style, distance, course, time_official, time_date)
+                values ($1, $2, $3, $4, $5, $6)
+                on conflict do nothing
+            ", swimmer_id, style, distance, "SHORT", best_time, best_time_short_date)
+            .execute(conn)
+            .await.expect("Error inserting a swimmer");
+    }
+
+    let best_time_long = match row.get(14) {
+        Some(time) => {
+            if time.is_empty() || time == "" {
+                return
+            } else {
+                &time[..8]
+            }
+        },
+        None => return,
+    };
+    println!("BTL: {}", best_time_long);
+    let best_time_minute = best_time_long.split(":").nth(0).unwrap().parse::<i32>().unwrap();
+    let best_time_second = best_time_long
+        .split(":").nth(1).unwrap()
+        .split(".").nth(0).unwrap()
+        .parse::<i32>().unwrap();
+    let best_time_milisecond = best_time_long.split(".").last().unwrap().parse::<i32>().unwrap();
+    let best_time = best_time_minute * 60000 + best_time_second * 1000 + best_time_milisecond * 10;
+
+    let best_time_long_date = match NaiveDate::parse_from_str(row.get(15).unwrap(), "%b-%d-%y") {
+        Ok(dt) => dt,
+        Err(e) => {
+            println!("Error decoding best time date at line {}: {}", row_num + 1, e);
+            return
+        }
+    };
+    
+    sqlx::query!("
+            insert into swimmer_time (swimmer, style, distance, course, time_official, time_date)
+            values ($1, $2, $3, $4, $5, $6)
+            on conflict do nothing
+        ", swimmer_id, style, distance, "LONG", best_time, best_time_long_date)
         .execute(conn)
         .await.expect("Error inserting a swimmer");
 }
