@@ -4,7 +4,7 @@ extern crate lazy_static;
 use actix_files as fs;
 use actix_multipart::form::tempfile::TempFile;
 use actix_multipart::form::MultipartForm;
-use actix_web::{web, App, Error, HttpResponse, HttpServer, Responder};
+use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use coach::config::load_config;
 use chrono::{NaiveDate, ParseError};
 use sqlx::postgres::PgPool;
@@ -33,7 +33,15 @@ struct UploadForm {
     files: Vec<TempFile>,
 }
 
-async fn import_meet_entries(conn: web::Data<PgPool>, MultipartForm(form): MultipartForm<UploadForm>) -> Result<impl Responder, Error> {
+async fn home_view() -> impl Responder {
+    let context = Context::new();
+
+    HttpResponse::Ok()
+        .content_type("text/html; charset=utf-8")
+        .body(TEMPLATES.render("index.html", &context).unwrap())
+}
+
+async fn import_meet_entries(conn: web::Data<PgPool>, MultipartForm(form): MultipartForm<UploadForm>) -> impl Responder {
     for csv_file in form.files {
         let now = Instant::now();
         let reader = io::BufReader::new(csv_file.file);
@@ -64,7 +72,10 @@ async fn import_meet_entries(conn: web::Data<PgPool>, MultipartForm(form): Multi
         println!("Finished importing meet entries.")
     }
 
-    Ok(HttpResponse::Ok())
+    let context = Context::new();
+    HttpResponse::Ok()
+        .content_type("text/html; charset=utf-8")
+        .body(TEMPLATES.render("meet.html", &context).unwrap())
 }
 
 async fn import_swimmer(conn: &PgPool, row: &csv::StringRecord, row_num: usize) -> Result<String, ParseError> {
@@ -195,12 +206,12 @@ async fn register_load(conn: &PgPool, swimmers: HashSet<String>, num_entries: i3
         .await.expect("Error inserting a swimmer");
 }
 
-async fn home_view() -> impl Responder {
+async fn compare_with_meet() -> impl Responder {
     let context = Context::new();
 
     HttpResponse::Ok()
         .content_type("text/html; charset=utf-8")
-        .body(TEMPLATES.render("index.html", &context).unwrap())
+        .body(TEMPLATES.render("results.html", &context).unwrap())
 }
 
 #[tokio::main]
@@ -218,7 +229,8 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .service(fs::Files::new("/static", "./static").show_files_listing())
             .route("/", web::get().to(home_view))
-            .route("/meet/results", web::post().to(import_meet_entries))
+            .route("/meet/entries", web::post().to(import_meet_entries))
+            .route("/meet/results", web::post().to(compare_with_meet))
             .app_data(conn.clone())})
         .bind(("0.0.0.0", config.server_port))?
         .run()
