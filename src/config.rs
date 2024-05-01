@@ -1,5 +1,7 @@
 use std::env;
 
+use config::ConfigError;
+
 #[derive(serde::Deserialize)]
 pub struct Config {
     pub database: DatabaseConfig,
@@ -14,49 +16,37 @@ pub struct DatabaseConfig {
 pub fn load_config() -> Result<Config, config::ConfigError> {
     match config::Config::builder()
         .add_source(config::File::new("config.yaml", config::FileFormat::Yaml))
-        .build() {
-            Ok(config) => {
-                match config.try_deserialize::<Config>() {
-                    Ok(c) => Ok(c),
-                    Err(e) => {
-                        println!("Error deserializing config file: {}. Trying environment variables.", e);
-                        match load_config_from_env() {
-                            Ok(c) => Ok(c),
-                            Err(e) => Err(e),
-                        }
-                    }
-                }
-            },
-            Err(e) => {
-                println!("{}. Loading from environment variables instead.", e);
-                match load_config_from_env() {
-                    Ok(c) => Ok(c),
-                    Err(e) => Err(e),
-                }
-            },
-        }
+        .build()
+    {
+        Ok(config) => config
+            .try_deserialize::<Config>()
+            .or_else(load_config_from_env),
+        Err(e) => load_config_from_env(e),
+    }
 }
 
-pub fn load_config_from_env() -> Result<Config, config::ConfigError> {
-    let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| "".to_string());
-    let port = env::var("PORT").unwrap_or_else(|_| "8000".to_string()).parse().expect("PORT must be a number");
-    let config: Config;
+fn load_config_from_env(e: ConfigError) -> Result<Config, config::ConfigError> {
+    println!("{}. Loading from environment variables instead.", e);
 
-    if database_url.is_empty() {
-        config = Config {
+    let port = env::var("PORT")
+        .unwrap_or_else(|_| "8000".to_string())
+        .parse()
+        .expect("PORT must be a number");
+
+    let config: Config = match env::var("DATABASE_URL") {
+        Ok(url) => Config {
             server_port: port,
-            database: DatabaseConfig {
-                url: env::var("DATABASE_URL").unwrap_or_else(|_| "".to_string()),
+            database: DatabaseConfig { url },
+        },
+        Err(e) => {
+            println!("DATABASE_URL: {}", e);
+            Config {
+                server_port: port,
+                database: DatabaseConfig {
+                    url: String::from(""),
+                },
             }
-        };
-    } else {
-        config = Config {
-            server_port: port,
-            database: DatabaseConfig {
-                url: database_url,
-            },
-        };
-    }
-
+        }
+    };
     Ok(config)
 }
