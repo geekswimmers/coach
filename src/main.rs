@@ -1,17 +1,19 @@
 #[macro_use]
 extern crate lazy_static;
 
+use std::collections::HashSet;
+use std::io;
+use std::time::{Duration, Instant};
+
 use actix_files as fs;
 use actix_multipart::form::tempfile::TempFile;
 use actix_multipart::form::MultipartForm;
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
-use coach::config::load_config;
 use chrono::{NaiveDate, ParseError};
 use sqlx::postgres::PgPool;
-use std::collections::HashSet;
-use std::io;
-use std::time::{Duration, Instant};
 use tera::{Context, Tera};
+
+use coach::config::load_config;
 
 lazy_static! {
     pub static ref TEMPLATES: Tera = {
@@ -41,7 +43,10 @@ async fn home_view() -> impl Responder {
         .body(TEMPLATES.render("index.html", &context).unwrap())
 }
 
-async fn import_meet_entries(conn: web::Data<PgPool>, MultipartForm(form): MultipartForm<UploadForm>) -> impl Responder {
+async fn import_meet_entries(
+    conn: web::Data<PgPool>,
+    MultipartForm(form): MultipartForm<UploadForm>,
+) -> impl Responder {
     for csv_file in form.files {
         let now = Instant::now();
         let reader = io::BufReader::new(csv_file.file);
@@ -58,13 +63,13 @@ async fn import_meet_entries(conn: web::Data<PgPool>, MultipartForm(form): Multi
                     match import_swimmer(conn.get_ref(), &row, i).await {
                         Ok(swimmer_id) => {
                             let _b = swimmers.insert(swimmer_id);
-                        },
-                        Err(e) => println!("Error importing swimmer: {}", e)
+                        }
+                        Err(e) => println!("Error importing swimmer: {}", e),
                     };
                     import_times(conn.get_ref(), &row, i).await;
                     num_entries += 1;
                 }
-                Err(e) => println!("Error: {}", e)
+                Err(e) => println!("Error: {}", e),
             }
         }
         let elapsed = now.elapsed();
@@ -78,37 +83,53 @@ async fn import_meet_entries(conn: web::Data<PgPool>, MultipartForm(form): Multi
         .body(TEMPLATES.render("meet.html", &context).unwrap())
 }
 
-async fn import_swimmer(conn: &PgPool, row: &csv::StringRecord, row_num: usize) -> Result<String, ParseError> {
+async fn import_swimmer(
+    conn: &PgPool,
+    row: &csv::StringRecord,
+    row_num: usize,
+) -> Result<String, ParseError> {
     let swimmer_id = row.get(0).unwrap();
     let full_name = row.get(4).unwrap();
-    let last_name = full_name.split(" ").nth(0);
-    let first_name = full_name.split(" ").last();
+    let last_name = full_name.split(' ').next();
+    let first_name = full_name.split(' ').last();
     let gender = row.get(5).unwrap().to_uppercase();
     let birth = row.get(7).unwrap();
     let birth_date = match NaiveDate::parse_from_str(birth, "%b-%d-%y") {
         Ok(dt) => dt,
         Err(e) => {
-            println!("Error decoding date of birth at line {}: {}", row_num + 1, e);
-            return Err(e)
+            println!(
+                "Error decoding date of birth at line {}: {}",
+                row_num + 1,
+                e
+            );
+            return Err(e);
         }
     };
-    
-    sqlx::query!("
+
+    sqlx::query!(
+        "
             insert into swimmer (id, name_first, name_last, gender, birth_date) 
             values ($1, $2, $3, $4, $5)
             on conflict do nothing
-       ", swimmer_id, first_name, last_name, gender, birth_date)
-        .execute(conn)
-        .await.expect("Error inserting a swimmer");
+       ",
+        swimmer_id,
+        first_name,
+        last_name,
+        gender,
+        birth_date
+    )
+    .execute(conn)
+    .await
+    .expect("Error inserting a swimmer");
 
-    return Ok(swimmer_id.to_string())
+    Ok(swimmer_id.to_string())
 }
 
 async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize) {
     let swimmer_id = row.get(0).unwrap();
     let event = row.get(9).unwrap();
-    let distance: i32 = event.split(" ").nth(0).unwrap().parse().unwrap();
-    let style = match event.split(" ").last().unwrap() {
+    let distance: i32 = event.split(' ').next().unwrap().parse().unwrap();
+    let style = match event.split(' ').last().unwrap() {
         "Fr" => "FREESTYLE",
         "Bk" => "BACKSTROKE",
         "Br" => "BREASTSTROKE",
@@ -119,29 +140,50 @@ async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize) {
 
     let best_time_short = match row.get(12) {
         Some(time) => {
-            if time.is_empty() || time == "" {
+            if time.is_empty() {
                 ""
             } else {
                 &time[..8]
             }
-        },
+        }
         None => return,
     };
 
     if !best_time_short.is_empty() {
-        let best_time_minute = best_time_short.split(":").nth(0).unwrap().parse::<i32>().unwrap();
+        let best_time_minute = best_time_short
+            .split(':')
+            .next()
+            .unwrap()
+            .parse::<i32>()
+            .unwrap();
         let best_time_second = best_time_short
-            .split(":").nth(1).unwrap()
-            .split(".").nth(0).unwrap()
-            .parse::<i32>().unwrap();
-        let best_time_milisecond = best_time_short.split(".").last().unwrap().parse::<i32>().unwrap();
-        let best_time: i32 = best_time_minute * 60000 + best_time_second * 1000 + best_time_milisecond * 10;
+            .split(':')
+            .nth(1)
+            .unwrap()
+            .split('.')
+            .next()
+            .unwrap()
+            .parse::<i32>()
+            .unwrap();
+        let best_time_milisecond = best_time_short
+            .split('.')
+            .last()
+            .unwrap()
+            .parse::<i32>()
+            .unwrap();
+        let best_time: i32 =
+            best_time_minute * 60000 + best_time_second * 1000 + best_time_milisecond * 10;
 
-        let best_time_short_date = match NaiveDate::parse_from_str(row.get(13).unwrap(), "%b-%d-%y") {
+        let best_time_short_date = match NaiveDate::parse_from_str(row.get(13).unwrap(), "%b-%d-%y")
+        {
             Ok(dt) => dt,
             Err(e) => {
-                println!("Error decoding best time date at line {}: {}", row_num + 1, e);
-                return
+                println!(
+                    "Error decoding best time date at line {}: {}",
+                    row_num + 1,
+                    e
+                );
+                return;
             }
         };
 
@@ -156,40 +198,73 @@ async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize) {
 
     let best_time_long = match row.get(14) {
         Some(time) => {
-            if time.is_empty() || time == "" {
-                return
+            if time.is_empty() {
+                return;
             } else {
                 &time[..8]
             }
-        },
+        }
         None => return,
     };
-    let best_time_minute = best_time_long.split(":").nth(0).unwrap().parse::<i32>().unwrap();
+    let best_time_minute = best_time_long
+        .split(':')
+        .next()
+        .unwrap()
+        .parse::<i32>()
+        .unwrap();
     let best_time_second = best_time_long
-        .split(":").nth(1).unwrap()
-        .split(".").nth(0).unwrap()
-        .parse::<i32>().unwrap();
-    let best_time_milisecond = best_time_long.split(".").last().unwrap().parse::<i32>().unwrap();
+        .split(':')
+        .nth(1)
+        .unwrap()
+        .split('.')
+        .next()
+        .unwrap()
+        .parse::<i32>()
+        .unwrap();
+    let best_time_milisecond = best_time_long
+        .split('.')
+        .last()
+        .unwrap()
+        .parse::<i32>()
+        .unwrap();
     let best_time = best_time_minute * 60000 + best_time_second * 1000 + best_time_milisecond * 10;
 
     let best_time_long_date = match NaiveDate::parse_from_str(row.get(15).unwrap(), "%b-%d-%y") {
         Ok(dt) => dt,
         Err(e) => {
-            println!("Error decoding best time date at line {}: {}", row_num + 1, e);
-            return
+            println!(
+                "Error decoding best time date at line {}: {}",
+                row_num + 1,
+                e
+            );
+            return;
         }
     };
-    
-    sqlx::query!("
+
+    sqlx::query!(
+        "
             insert into swimmer_time (swimmer, style, distance, course, time_official, time_date)
             values ($1, $2, $3, $4, $5, $6)
             on conflict do nothing
-        ", swimmer_id, style, distance, "LONG", best_time, best_time_long_date)
-        .execute(conn)
-        .await.expect("Error inserting a swimmer");
+        ",
+        swimmer_id,
+        style,
+        distance,
+        "LONG",
+        best_time,
+        best_time_long_date
+    )
+    .execute(conn)
+    .await
+    .expect("Error inserting a swimmer");
 }
 
-async fn register_load(conn: &PgPool, swimmers: HashSet<String>, num_entries: i32, duration: Duration) {
+async fn register_load(
+    conn: &PgPool,
+    swimmers: HashSet<String>,
+    num_entries: i32,
+    duration: Duration,
+) {
     let num_swimmers = swimmers.len() as i32;
     let mut ss: String = String::new();
     let mut sep: String = "".to_string();
@@ -198,12 +273,19 @@ async fn register_load(conn: &PgPool, swimmers: HashSet<String>, num_entries: i3
         sep = ", ".to_string();
     }
 
-    sqlx::query!("
+    sqlx::query!(
+        "
             insert into entries_load (num_swimmers, num_entries, duration, swimmers)
             values ($1, $2, $3, $4)
-        ", num_swimmers, num_entries, duration.as_millis() as i32, ss)
-        .execute(conn)
-        .await.expect("Error inserting a swimmer");
+        ",
+        num_swimmers,
+        num_entries,
+        duration.as_millis() as i32,
+        ss
+    )
+    .execute(conn)
+    .await
+    .expect("Error inserting a swimmer");
 }
 
 async fn compare_with_meet() -> impl Responder {
@@ -217,11 +299,14 @@ async fn compare_with_meet() -> impl Responder {
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     let config = load_config().expect("Failed to load config");
-    let pool = PgPool::connect(&config.database.url).await.expect("Failed to connect to database");
+    let pool = PgPool::connect(&config.database.url)
+        .await
+        .expect("Failed to connect to database");
 
     sqlx::migrate!("storage/migrations")
         .run(&pool)
-        .await.expect("Failed to migrate database");
+        .await
+        .expect("Failed to migrate database");
 
     let conn = web::Data::new(pool);
 
@@ -231,8 +316,9 @@ async fn main() -> std::io::Result<()> {
             .route("/", web::get().to(home_view))
             .route("/meet/entries", web::post().to(import_meet_entries))
             .route("/meet/results", web::post().to(compare_with_meet))
-            .app_data(conn.clone())})
-        .bind(("0.0.0.0", config.server_port))?
-        .run()
-        .await
+            .app_data(conn.clone())
+    })
+    .bind(("0.0.0.0", config.server_port))?
+    .run()
+    .await
 }
