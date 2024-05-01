@@ -8,15 +8,15 @@ use std::time::{Duration, Instant};
 use actix_files as fs;
 use actix_multipart::form::tempfile::TempFile;
 use actix_multipart::form::MultipartForm;
+use actix_web::middleware::Logger;
 use actix_web::web::Form;
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
-//use awc::Client;
 use chrono::{NaiveDate, ParseError};
+use coach::config::{load_config, Config};
+use env_logger::Env;
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgPool;
 use tera::{Context, Tera};
-
-use coach::config::{load_config, Config};
 
 lazy_static! {
     pub static ref TEMPLATES: Tera = {
@@ -320,6 +320,7 @@ async fn compare_with_meet(state: web::Data<AppState>, form: Form<MeetForm>) -> 
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
     let config = load_config().expect("Failed to load config");
     let server_port = config.server_port;
     let pool = PgPool::connect(&config.database.url)
@@ -332,11 +333,11 @@ async fn main() -> std::io::Result<()> {
         .expect("Failed to migrate database");
 
     let app_state = AppState { config, pool };
-
     let data_app_state = web::Data::new(app_state);
 
     HttpServer::new(move || {
         App::new()
+            .wrap(Logger::default())
             .service(fs::Files::new("/static", "./static").show_files_listing())
             .route("/", web::get().to(home_view))
             .route("/meet/entries", web::post().to(import_meet_entries))
