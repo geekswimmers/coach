@@ -34,14 +34,13 @@ fn load_config_from_env(e: ConfigError) -> Result<Config, config::ConfigError> {
         .parse()
         .expect("PORT must be a number");
 
-    let results_url = env::var("RESULTS_URL")
-        .unwrap_or_else(|_| "".to_string());
+    let results_url = env::var("RESULTS_URL").unwrap_or_else(|_| "".to_string());
 
     let config: Config = match env::var("DATABASE_URL") {
         Ok(url) => Config {
             server_port: port,
             database: DatabaseConfig { url },
-            results_url: results_url,
+            results_url,
         },
         Err(e) => {
             println!("DATABASE_URL: {}", e);
@@ -50,7 +49,7 @@ fn load_config_from_env(e: ConfigError) -> Result<Config, config::ConfigError> {
                 database: DatabaseConfig {
                     url: String::from(""),
                 },
-                results_url: results_url,
+                results_url,
             }
         }
     };

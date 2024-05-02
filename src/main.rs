@@ -301,13 +301,10 @@ async fn register_load(
     .expect("Error inserting a swimmer");
 }
 
-async fn compare_with_meet(
-    state: web::Data<AppState>,
-    form: Form<MeetForm>,
-) -> impl Responder {
+async fn compare_with_meet(state: web::Data<AppState>, form: Form<MeetForm>) -> impl Responder {
     println!(
-        "Meet Url: {}{}", 
-        &state.get_ref().config.results_url, 
+        "Meet Url: {}{}",
+        &state.get_ref().config.results_url,
         form.id
     );
 
