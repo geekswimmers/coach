@@ -8,8 +8,10 @@ use std::time::{Duration, Instant};
 use actix_files as fs;
 use actix_multipart::form::tempfile::TempFile;
 use actix_multipart::form::MultipartForm;
+use actix_web::web::Form;
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use chrono::{NaiveDate, ParseError};
+use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgPool;
 use tera::{Context, Tera};
 
@@ -30,9 +32,14 @@ lazy_static! {
 }
 
 #[derive(Debug, MultipartForm)]
-struct UploadForm {
+struct MeetEntriesUploadForm {
     #[multipart(rename = "meet-entries-file")]
     files: Vec<TempFile>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct MeetForm {
+    id: String,
 }
 
 async fn home_view() -> impl Responder {
@@ -45,7 +52,7 @@ async fn home_view() -> impl Responder {
 
 async fn import_meet_entries(
     conn: web::Data<PgPool>,
-    MultipartForm(form): MultipartForm<UploadForm>,
+    MultipartForm(form): MultipartForm<MeetEntriesUploadForm>,
 ) -> impl Responder {
     for csv_file in form.files {
         let now = Instant::now();
@@ -288,7 +295,11 @@ async fn register_load(
     .expect("Error inserting a swimmer");
 }
 
-async fn compare_with_meet() -> impl Responder {
+async fn compare_with_meet(
+    form: Form<MeetForm>
+) -> impl Responder {
+    println!("Meet Id: {}", form.id);
+
     let context = Context::new();
 
     HttpResponse::Ok()

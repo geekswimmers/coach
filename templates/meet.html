@@ -5,10 +5,10 @@
             <h5 class="display-5">Check Meet Results</h5>
             <p class="card-text">Inform the meet id from Swimming Canada</p>
             
-            <form id="meet-entries-form" method="post" action="/meet/results" enctype="multipart/form-data">
+            <form id="meet-form" method="post" action="/meet/results">
                 <div class="mb-3">
                     <label for="meet-id" class="form-label">Meet ID</label>
-                    <input type="text" class="form-control" name="meet-id" id="meet-id" required>
+                    <input type="text" class="form-control" name="id" id="id" required>
                     <small class="text-body-secondary">Find the meet on <a href="https://www.swimming.ca/en/events-results/meet-results/" target="_blank" rel="noopener noreferrer">Swimming Canada website</a>, copy the id, and paste it here.</small>
                 </div>
                     
