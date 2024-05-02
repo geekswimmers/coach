@@ -34,7 +34,7 @@ lazy_static! {
 
 struct AppState {
     config: Config,
-    conn: PgPool,
+    pool: PgPool,
 }
 
 #[derive(Debug, MultipartForm)]
@@ -73,20 +73,20 @@ async fn import_meet_entries(
         for (i, record) in csv_reader.records().enumerate() {
             match record {
                 Ok(row) => {
-                    match import_swimmer(&state.get_ref().conn, &row, i).await {
+                    match import_swimmer(&state.get_ref().pool, &row, i).await {
                         Ok(swimmer_id) => {
                             let _b = swimmers.insert(swimmer_id);
                         }
                         Err(e) => println!("Error importing swimmer: {}", e),
                     };
-                    import_times(&state.get_ref().conn, &row, i).await;
+                    import_times(&state.get_ref().pool, &row, i).await;
                     num_entries += 1;
                 }
                 Err(e) => println!("Error: {}", e),
             }
         }
         let elapsed = now.elapsed();
-        register_load(&state.get_ref().conn, swimmers, num_entries, elapsed).await;
+        register_load(&state.get_ref().pool, swimmers, num_entries, elapsed).await;
         println!("Finished importing meet entries.")
     }
 
@@ -332,8 +332,8 @@ async fn main() -> std::io::Result<()> {
         .expect("Failed to migrate database");
 
     let app_state = AppState {
-        config: config,
-        conn: pool,
+        config,
+        pool,
     };
 
     let data_app_state = web::Data::new(app_state);
