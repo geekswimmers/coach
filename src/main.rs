@@ -305,7 +305,11 @@ async fn compare_with_meet(
     state: web::Data<AppState>,
     form: Form<MeetForm>,
 ) -> impl Responder {
-    println!("Meet Url: {}{}", &state.get_ref().config.results_url, form.id);
+    println!(
+        "Meet Url: {}{}", 
+        &state.get_ref().config.results_url, 
+        form.id
+    );
 
     //let client = Client::default();
     //let meet_results_html = client.get("url");
