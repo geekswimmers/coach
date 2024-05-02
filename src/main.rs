@@ -10,12 +10,13 @@ use actix_multipart::form::tempfile::TempFile;
 use actix_multipart::form::MultipartForm;
 use actix_web::web::Form;
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
+//use awc::Client;
 use chrono::{NaiveDate, ParseError};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgPool;
 use tera::{Context, Tera};
 
-use coach::config::load_config;
+use coach::config::{load_config, Config};
 
 lazy_static! {
     pub static ref TEMPLATES: Tera = {
@@ -29,6 +30,11 @@ lazy_static! {
         let _ = tera.full_reload();
         return tera;
     };
+}
+
+struct AppState {
+    config: Config,
+    conn: PgPool,
 }
 
 #[derive(Debug, MultipartForm)]
@@ -51,7 +57,7 @@ async fn home_view() -> impl Responder {
 }
 
 async fn import_meet_entries(
-    conn: web::Data<PgPool>,
+    state: web::Data<AppState>,
     MultipartForm(form): MultipartForm<MeetEntriesUploadForm>,
 ) -> impl Responder {
     for csv_file in form.files {
@@ -67,20 +73,20 @@ async fn import_meet_entries(
         for (i, record) in csv_reader.records().enumerate() {
             match record {
                 Ok(row) => {
-                    match import_swimmer(conn.get_ref(), &row, i).await {
+                    match import_swimmer(&state.get_ref().conn, &row, i).await {
                         Ok(swimmer_id) => {
                             let _b = swimmers.insert(swimmer_id);
                         }
                         Err(e) => println!("Error importing swimmer: {}", e),
                     };
-                    import_times(conn.get_ref(), &row, i).await;
+                    import_times(&state.get_ref().conn, &row, i).await;
                     num_entries += 1;
                 }
                 Err(e) => println!("Error: {}", e),
             }
         }
         let elapsed = now.elapsed();
-        register_load(conn.get_ref(), swimmers, num_entries, elapsed).await;
+        register_load(&state.get_ref().conn, swimmers, num_entries, elapsed).await;
         println!("Finished importing meet entries.")
     }
 
@@ -296,9 +302,13 @@ async fn register_load(
 }
 
 async fn compare_with_meet(
-    form: Form<MeetForm>
+    state: web::Data<AppState>,
+    form: Form<MeetForm>,
 ) -> impl Responder {
-    println!("Meet Id: {}", form.id);
+    println!("Meet Url: {}{}", &state.get_ref().config.results_url, form.id);
+
+    //let client = Client::default();
+    //let meet_results_html = client.get("url");
 
     let context = Context::new();
 
@@ -310,6 +320,7 @@ async fn compare_with_meet(
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     let config = load_config().expect("Failed to load config");
+    let server_port = config.server_port;
     let pool = PgPool::connect(&config.database.url)
         .await
         .expect("Failed to connect to database");
@@ -319,7 +330,12 @@ async fn main() -> std::io::Result<()> {
         .await
         .expect("Failed to migrate database");
 
-    let conn = web::Data::new(pool);
+    let app_state = AppState {
+        config: config,
+        conn: pool,
+    };
+
+    let data_app_state = web::Data::new(app_state);
 
     HttpServer::new(move || {
         App::new()
@@ -327,9 +343,9 @@ async fn main() -> std::io::Result<()> {
             .route("/", web::get().to(home_view))
             .route("/meet/entries", web::post().to(import_meet_entries))
             .route("/meet/results", web::post().to(compare_with_meet))
-            .app_data(conn.clone())
+            .app_data(data_app_state.clone())
     })
-    .bind(("0.0.0.0", config.server_port))?
+    .bind(("0.0.0.0", server_port))?
     .run()
     .await
 }
