@@ -3,14 +3,16 @@ extern crate lazy_static;
 
 use std::collections::HashSet;
 use std::io;
+use std::str::from_utf8;
 use std::time::{Duration, Instant};
 
 use actix_files as fs;
 use actix_multipart::form::tempfile::TempFile;
 use actix_multipart::form::MultipartForm;
 use actix_web::middleware::Logger;
-use actix_web::web::Form;
+use actix_web::web::{Bytes, Form};
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
+use awc::Client;
 use chrono::{NaiveDate, ParseError};
 use coach::config::{load_config, Config};
 use env_logger::Env;
@@ -28,7 +30,7 @@ lazy_static! {
             }
         };
         let _ = tera.full_reload();
-        return tera;
+        tera
     };
 }
 
@@ -302,15 +304,15 @@ async fn register_load(
 }
 
 async fn compare_with_meet(state: web::Data<AppState>, form: Form<MeetForm>) -> impl Responder {
-    println!(
-        "Meet Url: {}{}",
-        &state.get_ref().config.results_url,
-        form.id
-    );
+    let url = format!("{}{}", &state.get_ref().config.results_url, form.id);
+    println!("Downloading results from {}", url);
 
-    //let client = Client::default();
-    //let meet_results_html = client.get("url");
-
+    let client = Client::default();
+    let mut res = client.get(url).timeout(Duration::from_secs(60)).send().await.unwrap();
+    let body: Bytes = res.body().limit(20_000_000).await.unwrap();
+    let html = from_utf8(&body).unwrap();
+    println!("{}", html);
+    
     let context = Context::new();
 
     HttpResponse::Ok()
