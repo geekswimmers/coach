@@ -308,11 +308,16 @@ async fn compare_with_meet(state: web::Data<AppState>, form: Form<MeetForm>) -> 
     println!("Downloading results from {}", url);
 
     let client = Client::default();
-    let mut res = client.get(url).timeout(Duration::from_secs(60)).send().await.unwrap();
+    let mut res = client
+        .get(url)
+        .timeout(Duration::from_secs(60))
+        .send()
+        .await
+        .unwrap();
     let body: Bytes = res.body().limit(20_000_000).await.unwrap();
     let html = from_utf8(&body).unwrap();
     println!("{}", html);
-    
+
     let context = Context::new();
 
     HttpResponse::Ok()
