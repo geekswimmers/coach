@@ -25,7 +25,7 @@ lazy_static! {
         let mut tera = match Tera::new("templates/**/*.html") {
             Ok(t) => t,
             Err(e) => {
-                println!("Template parsing error(s): {}", e);
+                log::error!("Template parsing error(s): {}", e);
                 ::std::process::exit(1);
             }
         };
@@ -69,7 +69,7 @@ async fn import_meet_entries(
             .has_headers(true)
             .from_reader(reader);
 
-        println!("Started importing meet entries.");
+        log::info!("Started importing meet entries.");
         let mut swimmers = HashSet::new();
         let mut num_entries = 0;
         for (i, record) in csv_reader.records().enumerate() {
@@ -79,17 +79,17 @@ async fn import_meet_entries(
                         Ok(swimmer_id) => {
                             let _b = swimmers.insert(swimmer_id);
                         }
-                        Err(e) => println!("Error importing swimmer: {}", e),
+                        Err(e) => log::error!("Error importing swimmer: {}", e),
                     };
                     import_times(&state.get_ref().pool, &row, i).await;
                     num_entries += 1;
                 }
-                Err(e) => println!("Error: {}", e),
+                Err(e) => log::error!("Error: {}", e),
             }
         }
         let elapsed = now.elapsed();
         register_load(&state.get_ref().pool, swimmers, num_entries, elapsed).await;
-        println!("Finished importing meet entries.")
+        log::info!("Finished importing meet entries.")
     }
 
     let context = Context::new();
@@ -112,7 +112,7 @@ async fn import_swimmer(
     let birth_date = match NaiveDate::parse_from_str(birth, "%b-%d-%y") {
         Ok(dt) => dt,
         Err(e) => {
-            println!(
+            log::error!(
                 "Error decoding date of birth at line {}: {}",
                 row_num + 1,
                 e
@@ -193,7 +193,7 @@ async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize) {
         {
             Ok(dt) => dt,
             Err(e) => {
-                println!(
+                log::error!(
                     "Error decoding best time date at line {}: {}",
                     row_num + 1,
                     e
@@ -247,7 +247,7 @@ async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize) {
     let best_time_long_date = match NaiveDate::parse_from_str(row.get(15).unwrap(), "%b-%d-%y") {
         Ok(dt) => dt,
         Err(e) => {
-            println!(
+            log::error!(
                 "Error decoding best time date at line {}: {}",
                 row_num + 1,
                 e
@@ -305,7 +305,7 @@ async fn register_load(
 
 async fn compare_with_meet(state: web::Data<AppState>, form: Form<MeetForm>) -> impl Responder {
     let url = format!("{}{}", &state.get_ref().config.results_url, form.id);
-    println!("Downloading results from {}", url);
+    log::info!("Downloading results from {}", url);
 
     let client = Client::default();
     let mut res = client
@@ -316,7 +316,7 @@ async fn compare_with_meet(state: web::Data<AppState>, form: Form<MeetForm>) -> 
         .unwrap();
     let body: Bytes = res.body().limit(20_000_000).await.unwrap();
     let html = from_utf8(&body).unwrap();
-    println!("{}", html);
+    log::info!("{}", html);
 
     let context = Context::new();
 

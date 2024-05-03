@@ -27,7 +27,7 @@ pub fn load_config() -> Result<Config, config::ConfigError> {
 }
 
 fn load_config_from_env(e: ConfigError) -> Result<Config, config::ConfigError> {
-    println!("{}. Loading from environment variables instead.", e);
+    log::info!("{}. Loading from environment variables instead.", e);
 
     let port = env::var("PORT")
         .unwrap_or_else(|_| "8000".to_string())
@@ -43,7 +43,7 @@ fn load_config_from_env(e: ConfigError) -> Result<Config, config::ConfigError> {
             results_url,
         },
         Err(e) => {
-            println!("DATABASE_URL: {}", e);
+            log::error!("DATABASE_URL: {}", e);
             Config {
                 server_port: port,
                 database: DatabaseConfig {
