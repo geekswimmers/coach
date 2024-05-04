@@ -121,18 +121,18 @@ async fn import_swimmer(
         }
     };
 
-    sqlx::query!(
+    sqlx::query(
         "
             insert into swimmer (id, name_first, name_last, gender, birth_date) 
             values ($1, $2, $3, $4, $5)
             on conflict do nothing
-       ",
-        swimmer_id,
-        first_name,
-        last_name,
-        gender,
-        birth_date
+       "
     )
+    .bind(swimmer_id)
+    .bind(first_name)
+    .bind(last_name)
+    .bind(gender)
+    .bind(birth_date)
     .execute(conn)
     .await
     .expect("Error inserting a swimmer");
@@ -202,11 +202,17 @@ async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize) {
             }
         };
 
-        sqlx::query!("
+        sqlx::query("
                 insert into swimmer_time (swimmer, style, distance, course, time_official, time_date)
                 values ($1, $2, $3, $4, $5, $6)
                 on conflict do nothing
-            ", swimmer_id, style, distance, "SHORT", best_time, best_time_short_date)
+            ")
+            .bind(swimmer_id)
+            .bind(style)
+            .bind(distance)
+            .bind("SHORT")
+            .bind(best_time)
+            .bind(best_time_short_date)
             .execute(conn)
             .await.expect("Error inserting a swimmer");
     }
@@ -256,22 +262,21 @@ async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize) {
         }
     };
 
-    sqlx::query!(
+    sqlx::query(
         "
             insert into swimmer_time (swimmer, style, distance, course, time_official, time_date)
             values ($1, $2, $3, $4, $5, $6)
             on conflict do nothing
-        ",
-        swimmer_id,
-        style,
-        distance,
-        "LONG",
-        best_time,
-        best_time_long_date
-    )
-    .execute(conn)
-    .await
-    .expect("Error inserting a swimmer");
+        ")
+        .bind(swimmer_id)
+        .bind(style)
+        .bind(distance)
+        .bind("LONG")
+        .bind(best_time)
+        .bind(best_time_long_date)
+        .execute(conn)
+        .await
+        .expect("Error inserting a swimmer");
 }
 
 async fn register_load(
@@ -288,19 +293,18 @@ async fn register_load(
         sep = ", ".to_string();
     }
 
-    sqlx::query!(
+    sqlx::query(
         "
             insert into entries_load (num_swimmers, num_entries, duration, swimmers)
             values ($1, $2, $3, $4)
-        ",
-        num_swimmers,
-        num_entries,
-        duration.as_millis() as i32,
-        ss
-    )
-    .execute(conn)
-    .await
-    .expect("Error inserting a swimmer");
+        ")
+        .bind(num_swimmers)
+        .bind(num_entries)
+        .bind(duration.as_millis() as i32)
+        .bind(ss)
+        .execute(conn)
+        .await
+        .expect("Error inserting a swimmer");
 }
 
 async fn compare_with_meet(state: web::Data<AppState>, form: Form<MeetForm>) -> impl Responder {
