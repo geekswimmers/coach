@@ -79,7 +79,7 @@ async fn import_meet_entries(
                         Ok(swimmer_id) => {
                             let _b = swimmers.insert(swimmer_id);
                         }
-                        Err(e) => log::error!("Error importing swimmer: {}", e),
+                        Err(e) => log::warn!("Failed importing swimmer at line {}: {}", i + 1, e),
                     };
                     import_times(&state.get_ref().pool, &row, i).await;
                     num_entries += 1;
@@ -112,8 +112,8 @@ async fn import_swimmer(
     let birth_date = match NaiveDate::parse_from_str(birth, "%b-%d-%y") {
         Ok(dt) => dt,
         Err(e) => {
-            log::error!(
-                "Error decoding date of birth at line {}: {}",
+            log::warn!(
+                "Failed decoding date of birth at line {}: {}",
                 row_num + 1,
                 e
             );
@@ -193,8 +193,8 @@ async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize) {
         {
             Ok(dt) => dt,
             Err(e) => {
-                log::error!(
-                    "Error decoding best time date at line {}: {}",
+                log::warn!(
+                    "Failed decoding best time date at line {}: {}",
                     row_num + 1,
                     e
                 );
@@ -247,8 +247,8 @@ async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize) {
     let best_time_long_date = match NaiveDate::parse_from_str(row.get(15).unwrap(), "%b-%d-%y") {
         Ok(dt) => dt,
         Err(e) => {
-            log::error!(
-                "Error decoding best time date at line {}: {}",
+            log::warn!(
+                "Failed decoding best time date at line {}: {}",
                 row_num + 1,
                 e
             );
