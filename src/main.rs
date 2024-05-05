@@ -126,7 +126,7 @@ async fn import_swimmer(
             insert into swimmer (id, name_first, name_last, gender, birth_date) 
             values ($1, $2, $3, $4, $5)
             on conflict do nothing
-        "
+        ",
     )
     .bind(swimmer_id)
     .bind(first_name)
@@ -165,30 +165,6 @@ async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize) {
     };
 
     if !best_time_short.is_empty() {
-        let best_time_minute = best_time_short
-            .split(':')
-            .next()
-            .unwrap()
-            .parse::<i32>()
-            .unwrap();
-        let best_time_second = best_time_short
-            .split(':')
-            .nth(1)
-            .unwrap()
-            .split('.')
-            .next()
-            .unwrap()
-            .parse::<i32>()
-            .unwrap();
-        let best_time_milisecond = best_time_short
-            .split('.')
-            .last()
-            .unwrap()
-            .parse::<i32>()
-            .unwrap();
-        let best_time: i32 =
-            best_time_minute * 60000 + best_time_second * 1000 + best_time_milisecond * 10;
-
         let best_time_short_date = match NaiveDate::parse_from_str(row.get(13).unwrap(), "%b-%d-%y")
         {
             Ok(dt) => dt,
@@ -202,19 +178,15 @@ async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize) {
             }
         };
 
-        sqlx::query("
-                insert into swimmer_time (swimmer, style, distance, course, time_official, time_date)
-                values ($1, $2, $3, $4, $5, $6)
-                on conflict do nothing
-            ")
-            .bind(swimmer_id)
-            .bind(style)
-            .bind(distance)
-            .bind("SHORT")
-            .bind(best_time)
-            .bind(best_time_short_date)
-            .execute(conn)
-            .await.expect("Error inserting a swimmer");
+        import_time(
+            conn,
+            swimmer_id,
+            style,
+            distance,
+            "SHORT",
+            best_time_short,
+            best_time_short_date,
+        ).await;
     }
 
     let best_time_long = match row.get(14) {
@@ -227,28 +199,6 @@ async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize) {
         }
         None => return,
     };
-    let best_time_minute = best_time_long
-        .split(':')
-        .next()
-        .unwrap()
-        .parse::<i32>()
-        .unwrap();
-    let best_time_second = best_time_long
-        .split(':')
-        .nth(1)
-        .unwrap()
-        .split('.')
-        .next()
-        .unwrap()
-        .parse::<i32>()
-        .unwrap();
-    let best_time_milisecond = best_time_long
-        .split('.')
-        .last()
-        .unwrap()
-        .parse::<i32>()
-        .unwrap();
-    let best_time = best_time_minute * 60000 + best_time_second * 1000 + best_time_milisecond * 10;
 
     let best_time_long_date = match NaiveDate::parse_from_str(row.get(15).unwrap(), "%b-%d-%y") {
         Ok(dt) => dt,
@@ -262,22 +212,56 @@ async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize) {
         }
     };
 
+    import_time(
+        conn,
+        swimmer_id,
+        style,
+        distance,
+        "LONG",
+        best_time_long,
+        best_time_long_date,
+    ).await;
+}
+
+async fn import_time(
+    conn: &PgPool,
+    swimmer_id: &str,
+    style: &str,
+    distance: i32,
+    course: &str,
+    best_time: &str,
+    best_time_date: NaiveDate,
+) {
+    let best_time_minute = best_time.split(':').next().unwrap().parse::<i32>().unwrap();
+    let best_time_second = best_time
+        .split(':')
+        .nth(1)
+        .unwrap()
+        .split('.')
+        .next()
+        .unwrap()
+        .parse::<i32>()
+        .unwrap();
+    let best_time_milisecond = best_time.split('.').last().unwrap().parse::<i32>().unwrap();
+    let best_time: i32 =
+        best_time_minute * 60000 + best_time_second * 1000 + best_time_milisecond * 10;
+
     sqlx::query(
         "
-            insert into swimmer_time (swimmer, style, distance, course, time_official, time_date)
-            values ($1, $2, $3, $4, $5, $6)
-            on conflict do nothing
-        ",
+        insert into swimmer_time (swimmer, style, distance, course, time_official, time_date)
+        values ($1, $2, $3, $4, $5, $6)
+        on conflict do nothing
+    ",
     )
     .bind(swimmer_id)
     .bind(style)
     .bind(distance)
-    .bind("LONG")
+    .bind(course)
     .bind(best_time)
-    .bind(best_time_long_date)
+    .bind(best_time_date)
     .execute(conn)
     .await
-    .expect("Error inserting a swimmer");
+    .expect("Error inserting swimmer's time");
 }
 
 async fn register_load(
