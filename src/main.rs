@@ -186,7 +186,8 @@ async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize) {
             "SHORT",
             best_time_short,
             best_time_short_date,
-        ).await;
+        )
+        .await;
     }
 
     let best_time_long = match row.get(14) {
@@ -220,7 +221,8 @@ async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize) {
         "LONG",
         best_time_long,
         best_time_long_date,
-    ).await;
+    )
+    .await;
 }
 
 async fn import_time(
