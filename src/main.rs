@@ -50,6 +50,19 @@ struct MeetForm {
     id: String,
 }
 
+struct Swimmer {
+    swimmer_id: String,
+}
+
+struct SwimmerTime {
+    swimmer: Swimmer,
+    style: String,
+    distance: i32,
+    course: String,
+    best_time: String,
+    best_time_date: NaiveDate,
+}
+
 async fn home_view() -> impl Responder {
     let context = Context::new();
 
