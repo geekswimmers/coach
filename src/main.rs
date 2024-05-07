@@ -2,17 +2,15 @@
 extern crate lazy_static;
 
 use std::collections::HashSet;
-use std::io;
-use std::str::from_utf8;
+use std::io::{self, Read};
+use std::str::from_utf8_unchecked;
 use std::time::{Duration, Instant};
 
 use actix_files as fs;
 use actix_multipart::form::tempfile::TempFile;
 use actix_multipart::form::MultipartForm;
 use actix_web::middleware::Logger;
-use actix_web::web::{Bytes, Form};
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
-use awc::Client;
 use chrono::{NaiveDate, ParseError};
 use coach::config::{load_config, Config};
 use env_logger::Env;
@@ -45,22 +43,15 @@ struct MeetEntriesUploadForm {
     files: Vec<TempFile>,
 }
 
+#[derive(MultipartForm)]
+struct MeetResultsForm {
+    #[multipart(rename = "meet-results-file")]
+    files: Vec<TempFile>,
+}
+
 #[derive(Serialize, Deserialize)]
 struct MeetForm {
     id: String,
-}
-
-struct Swimmer {
-    swimmer_id: String,
-}
-
-struct SwimmerTime {
-    swimmer: Swimmer,
-    style: String,
-    distance: i32,
-    course: String,
-    best_time: String,
-    best_time_date: NaiveDate,
 }
 
 async fn home_view() -> impl Responder {
@@ -308,21 +299,21 @@ async fn register_load(
     .expect("Error inserting a swimmer");
 }
 
-async fn compare_with_meet(state: web::Data<AppState>, form: Form<MeetForm>) -> impl Responder {
-    let url = format!("{}{}", &state.get_ref().config.results_url, form.id);
-    log::info!("Downloading results from {}", url);
-
-    let client = Client::default();
-    let mut res = client
-        .get(url)
-        .timeout(Duration::from_secs(60))
-        .send()
-        .await
-        .unwrap();
-    let body: Bytes = res.body().limit(20_000_000).await.unwrap();
-    let html = from_utf8(&body).unwrap();
-    log::info!("{}", html);
-
+async fn import_meet_results(
+    _state: web::Data<AppState>, 
+    MultipartForm(form): MultipartForm<MeetResultsForm>
+) -> impl Responder {
+    for mut results_file in form.files {
+        let mut raw_results = Vec::new();
+        //let mut results_file = File::open("MeetResult_39699_06-05-2024-53 09.xls").expect("file unavailable");
+        results_file.file.read_to_end(&mut raw_results).expect("Unable to read");
+        let str_results = unsafe {
+            from_utf8_unchecked(&raw_results)
+        };
+    
+        println!("{:?}", str_results);
+    }
+    
     let context = Context::new();
 
     HttpResponse::Ok()
@@ -353,7 +344,7 @@ async fn main() -> std::io::Result<()> {
             .service(fs::Files::new("/static", "./static").show_files_listing())
             .route("/", web::get().to(home_view))
             .route("/meet/entries", web::post().to(import_meet_entries))
-            .route("/meet/results", web::post().to(compare_with_meet))
+            .route("/meet/results", web::post().to(import_meet_results))
             .app_data(data_app_state.clone())
     })
     .bind(("0.0.0.0", server_port))?
