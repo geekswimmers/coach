@@ -13,5 +13,9 @@ target/
 /target
 
 # Project Specific
+*.csv
+*.CSV
+*.xls
+*.xlsx
 config.yaml
 .vscode/
