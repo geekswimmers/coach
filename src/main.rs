@@ -14,6 +14,7 @@ use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use chrono::{NaiveDate, ParseError};
 use coach::config::{load_config, Config};
 use env_logger::Env;
+use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgPool;
 use tera::{Context, Tera};
@@ -303,14 +304,39 @@ async fn import_meet_results(
     _state: web::Data<AppState>, 
     MultipartForm(form): MultipartForm<MeetResultsForm>
 ) -> impl Responder {
+    let cell_selector = Selector::parse(r#"table > tbody > tr > td"#).unwrap();
+    let name_selector = Selector::parse(r#"b"#).unwrap();
+
     for mut results_file in form.files {
         let mut raw_results = Vec::new();
         results_file.file.read_to_end(&mut raw_results).expect("Unable to read");
         let str_results = unsafe {
             from_utf8_unchecked(&raw_results)
         };
-    
-        println!("{:?}", str_results);
+
+        let html = Html::parse_document(&str_results);
+        let mut column_idx = 0;
+        for content in html.select(&cell_selector) {
+            let mut found_name = false;
+            
+            for name in content.select(&&name_selector) {
+                println!("Name: {:?}", name.inner_html());
+                found_name = true;
+            }
+
+            if !found_name {
+                let cell = content.inner_html();
+                if cell != "&nbsp;" {
+                    print!("{:?},", cell);
+                    column_idx += 1;
+                }
+
+                if column_idx == 6 {
+                    println!("");
+                    column_idx = 0;
+                }
+            }
+        }
     }
     
     let context = Context::new();
