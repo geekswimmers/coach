@@ -3,13 +3,12 @@
     <div class="card">
         <div class="card-body">
             <h5 class="display-5">Check Meet Results</h5>
-            <p class="card-text">Inform the meet id from Swimming Canada</p>
+            <p class="card-text">Upload the meet results file you downloaded from Swimming Canada.</p>
             
-            <form id="meet-form" method="post" action="/meet/results">
+            <form id="meet-results-form" method="post" action="/meet/results" enctype="multipart/form-data">
                 <div class="mb-3">
-                    <label for="meet-id" class="form-label">Meet ID</label>
-                    <input type="text" class="form-control" name="id" id="id" required>
-                    <small class="text-body-secondary">Find the meet on <a href="https://www.swimming.ca/en/events-results/meet-results/" target="_blank" rel="noopener noreferrer">Swimming Canada website</a>, copy the id, and paste it here.</small>
+                    <label for="meet-results-file" class="form-label">Meet Results File</label>
+                    <input type="file" class="form-control" id="meet-results-file" name="meet-results-file" accept="text/xls">
                 </div>
                     
                 <button type="submit" id="submit" class="btn btn-primary">
