@@ -305,7 +305,6 @@ async fn import_meet_results(
 ) -> impl Responder {
     for mut results_file in form.files {
         let mut raw_results = Vec::new();
-        //let mut results_file = File::open("MeetResult_39699_06-05-2024-53 09.xls").expect("file unavailable");
         results_file.file.read_to_end(&mut raw_results).expect("Unable to read");
         let str_results = unsafe {
             from_utf8_unchecked(&raw_results)
