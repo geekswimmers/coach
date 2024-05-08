@@ -16,8 +16,8 @@ use coach::config::{load_config, Config};
 use env_logger::Env;
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
-use sqlx::Row;
 use sqlx::postgres::{PgPool, PgRow};
+use sqlx::Row;
 use tera::{Context, Tera};
 
 lazy_static! {
@@ -313,12 +313,14 @@ async fn register_load(
 async fn search_swimmer_by_name(conn: &PgPool, name: String) -> Result<Swimmer, sqlx::Error> {
     let first_name = name.split(' ').next();
     let last_name = name.split(' ').last();
-    
-    sqlx::query("
+
+    sqlx::query(
+        "
         select id, name_first, name_last, gender, birth_date 
         from swimmer
         where name_first = $1 and name_last = $2
-    ")
+    ",
+    )
     .bind(first_name)
     .bind(last_name)
     .map(|row: PgRow| Swimmer {
@@ -333,32 +335,38 @@ async fn search_swimmer_by_name(conn: &PgPool, name: String) -> Result<Swimmer, 
 }
 
 async fn import_meet_results(
-    state: web::Data<AppState>, 
-    MultipartForm(form): MultipartForm<MeetResultsForm>
+    state: web::Data<AppState>,
+    MultipartForm(form): MultipartForm<MeetResultsForm>,
 ) -> impl Responder {
     let cell_selector = Selector::parse(r#"table > tbody > tr > td"#).unwrap();
     let name_selector = Selector::parse(r#"b"#).unwrap();
 
     for mut results_file in form.files {
         let mut raw_results = Vec::new();
-        results_file.file.read_to_end(&mut raw_results).expect("Unable to read");
-        let str_results = unsafe {
-            from_utf8_unchecked(&raw_results)
-        };
+        results_file
+            .file
+            .read_to_end(&mut raw_results)
+            .expect("Unable to read");
+        let str_results = unsafe { from_utf8_unchecked(&raw_results) };
 
         let html = Html::parse_document(str_results);
         let mut column_idx = 0;
         for content in html.select(&cell_selector) {
             let mut found_name = false;
-            
+
             for name in content.select(&name_selector) {
                 let name_cell = name.inner_html();
                 let full_name = name_cell.split(',').next();
-                match search_swimmer_by_name(&state.as_ref().pool, full_name.unwrap().to_string()).await {
+                match search_swimmer_by_name(&state.as_ref().pool, full_name.unwrap().to_string())
+                    .await
+                {
                     Ok(swimmer) => {
-                        println!("Swimmer: {:?} : {} {}", swimmer.id, swimmer.first_name, swimmer.last_name);
-                    },
-                    Err(e) => log::error!("Swimmer '{}' not found: {}", name_cell, e)
+                        println!(
+                            "Swimmer: {:?} : {} {}",
+                            swimmer.id, swimmer.first_name, swimmer.last_name
+                        );
+                    }
+                    Err(e) => log::error!("Swimmer '{}' not found: {}", name_cell, e),
                 };
                 found_name = true;
             }
@@ -377,7 +385,7 @@ async fn import_meet_results(
             }
         }
     }
-    
+
     let context = Context::new();
 
     HttpResponse::Ok()
