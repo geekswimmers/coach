@@ -13,9 +13,11 @@ pub struct DatabaseConfig {
 pub fn load_config() -> Result<Config, config::ConfigError> {
     let configuration = config::Config::builder()
         .add_source(config::File::new("config.yaml", config::FileFormat::Yaml))
-        .add_source(config::Environment::with_prefix("COACH")
-            .prefix_separator("_")
-            .separator("__"))
+        .add_source(
+            config::Environment::with_prefix("COACH")
+                .prefix_separator("_")
+                .separator("__"),
+        )
         .build()?;
 
     configuration.try_deserialize::<Config>()
