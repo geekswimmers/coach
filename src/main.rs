@@ -35,7 +35,7 @@ lazy_static! {
 }
 
 struct AppState {
-    config: Config,
+    _config: Config,
     pool: PgPool,
 }
 
@@ -407,7 +407,7 @@ async fn main() -> std::io::Result<()> {
         .await
         .expect("Failed to migrate database");
 
-    let app_state = AppState { config, pool };
+    let app_state = AppState { _config: config, pool };
     let data_app_state = web::Data::new(app_state);
 
     HttpServer::new(move || {
