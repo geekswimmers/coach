@@ -312,7 +312,7 @@ async fn register_load(
 
 async fn search_swimmer_by_name(conn: &PgPool, name: String) -> Result<Swimmer, sqlx::Error> {
     let first_name = name.split(' ').next();
-    let last_name = name.split(' ').last();
+    let last_name = name.split(' ').nth(1);
 
     sqlx::query(
         "
@@ -351,6 +351,7 @@ async fn import_meet_results(
 
         let html = Html::parse_document(str_results);
         let mut column_idx = 0;
+        let mut skip = false;
         for content in html.select(&cell_selector) {
             let mut found_name = false;
 
@@ -365,13 +366,17 @@ async fn import_meet_results(
                             "Swimmer: {:?} : {} {}",
                             swimmer.id, swimmer.first_name, swimmer.last_name
                         );
+                        found_name = true;
+                        skip = false;
                     }
-                    Err(e) => log::error!("Swimmer '{}' not found: {}", name_cell, e),
+                    Err(e) => { 
+                        log::error!("Swimmer '{}' not found: {}", name_cell, e);
+                        skip = true;
+                    }
                 };
-                found_name = true;
             }
 
-            if !found_name {
+            if !found_name && !skip {
                 let cell = content.inner_html();
                 if cell != "&nbsp;" {
                     print!("{:?},", cell);
@@ -384,6 +389,7 @@ async fn import_meet_results(
                 }
             }
         }
+        log::info!("File name: {}", results_file.file_name.unwrap());
     }
 
     let context = Context::new();
