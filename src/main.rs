@@ -180,12 +180,13 @@ async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize) {
     };
 
     let best_time_short = match row.get(12) {
-        Some(time) =>
+        Some(time) => {
             if time.is_empty() {
                 ""
             } else {
                 &time[..8]
-            },
+            }
+        }
         None => return,
     };
 
@@ -216,12 +217,13 @@ async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize) {
     }
 
     let best_time_long = match row.get(14) {
-        Some(time) => 
+        Some(time) => {
             if time.is_empty() {
                 return;
             } else {
                 &time[..8]
-            },
+            }
+        }
         None => return,
     };
 
@@ -372,18 +374,22 @@ async fn import_meet_results(
             for name in content.select(&name_selector) {
                 let name_cell = name.inner_html();
                 let full_name = name_cell.split(',').next();
-                match search_swimmer_by_name(&state.as_ref().pool, full_name.unwrap().to_string()).await
+                match search_swimmer_by_name(&state.as_ref().pool, full_name.unwrap().to_string())
+                    .await
                 {
                     Ok(swimmer) => {
                         println!(
                             "Swimmer: {:?} : {} {} : {}",
-                            swimmer.id, swimmer.first_name, swimmer.last_name, name_cell.split(' ').last().unwrap()
+                            swimmer.id,
+                            swimmer.first_name,
+                            swimmer.last_name,
+                            name_cell.split(' ').last().unwrap()
                         );
                         swimmer_time.swimmer = swimmer;
                         skip_name = true;
                         skip_swimmer = false;
                     }
-                    Err(e) => { 
+                    Err(e) => {
                         log::warn!("Swimmer '{}' not found: {}", name_cell, e);
                         skip_swimmer = true;
                     }
@@ -391,7 +397,7 @@ async fn import_meet_results(
             }
 
             if skip_name || skip_swimmer {
-                continue
+                continue;
             }
 
             let cell = content.inner_html();
@@ -410,23 +416,24 @@ async fn import_meet_results(
                     if re.is_match(&cell) {
                         let result_time = &cell[..8];
                         swimmer_time.time = time_to_miliseconds(result_time);
-        
+
                         if cell.ends_with('L') {
                             swimmer_time.course = "LONG".to_string();
                         }
-        
+
                         if cell.ends_with('S') {
                             swimmer_time.course = "SHORT".to_string();
                         }
                     }
-                },
+                }
                 2 => {
                     println!("{}", cell);
                     swimmer_time.swimmer.gender = cell.split(' ').next().unwrap().to_uppercase();
+                    swimmer_time.distance = cell.split(' ').nth(1).unwrap().parse().unwrap();
                 }
                 _ => (),
             }
-            
+
             column_idx += 1;
         }
         log::info!("File name: {}", results_file.file_name.unwrap());
@@ -442,7 +449,7 @@ async fn import_meet_results(
 /// Converts text in the format mm:ss.ms to miliseconds.
 fn time_to_miliseconds(time: &str) -> i32 {
     if time.is_empty() {
-        return 0
+        return 0;
     }
 
     let time_minute = match time.split(':').next() {
@@ -455,7 +462,7 @@ fn time_to_miliseconds(time: &str) -> i32 {
         },
         None => 0,
     };
-    
+
     let time_second = time
         .split(':')
         .nth(1)
