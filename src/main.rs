@@ -170,14 +170,7 @@ async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize) {
     let swimmer_id = row.get(0).unwrap();
     let event = row.get(9).unwrap();
     let distance: i32 = event.split(' ').next().unwrap().parse().unwrap();
-    let style = match event.split(' ').last().unwrap() {
-        "Fr" => "FREESTYLE",
-        "Bk" => "BACKSTROKE",
-        "Br" => "BREASTSTROKE",
-        "FL" => "BUTTERFLY",
-        "I.M" => "MEDLEY",
-        &_ => "",
-    };
+    let style = convert_style(event.split(' ').last().unwrap());
 
     let best_time_short = match row.get(12) {
         Some(time) => {
@@ -430,6 +423,7 @@ async fn import_meet_results(
                     println!("{}", cell);
                     swimmer_time.swimmer.gender = cell.split(' ').next().unwrap().to_uppercase();
                     swimmer_time.distance = cell.split(' ').nth(1).unwrap().parse().unwrap();
+                    swimmer_time.style = convert_style(cell.split(' ').last().unwrap()).to_string();
                 }
                 _ => (),
             }
@@ -474,6 +468,22 @@ fn time_to_miliseconds(time: &str) -> i32 {
         .unwrap();
     let time_milisecond = time.split('.').last().unwrap().parse::<i32>().unwrap();
     time_minute * 60000 + time_second * 1000 + time_milisecond * 10
+}
+
+fn convert_style(style: &str) -> &str {
+    return match style {
+        "Fr"     => "FREESTYLE",
+        "Free"   => "FREESTYLE",
+        "Bk"     => "BACKSTROKE",
+        "Back"   => "BACKSTROKE",
+        "Br"     => "BREASTSTROKE",
+        "Breast" => "BREASTSTROKE",
+        "FL"     => "BUTTERFLY",
+        "Fly"    => "BUTTERFLY",
+        "IM"     => "MEDLEY",
+        "I.M"    => "MEDLEY",
+        &_ => "",
+    };
 }
 
 #[tokio::main]
