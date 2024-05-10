@@ -14,6 +14,7 @@ use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use chrono::{NaiveDate, ParseError};
 use coach::config::{load_config, Config};
 use env_logger::Env;
+use regex::Regex;
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::{PgPool, PgRow};
@@ -63,6 +64,16 @@ struct Swimmer {
     last_name: String,
     gender: String,
     birth_date: NaiveDate,
+}
+
+#[derive(serde::Serialize)]
+struct SwimmerTime {
+    swimmer: Swimmer,
+    style: String,
+    distance: i32,
+    course: String,
+    time: i32,
+    time_date: NaiveDate,
 }
 
 async fn home_view() -> impl Responder {
@@ -169,13 +180,12 @@ async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize) {
     };
 
     let best_time_short = match row.get(12) {
-        Some(time) => {
+        Some(time) =>
             if time.is_empty() {
                 ""
             } else {
                 &time[..8]
-            }
-        }
+            },
         None => return,
     };
 
@@ -206,13 +216,12 @@ async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize) {
     }
 
     let best_time_long = match row.get(14) {
-        Some(time) => {
+        Some(time) => 
             if time.is_empty() {
                 return;
             } else {
                 &time[..8]
-            }
-        }
+            },
         None => return,
     };
 
@@ -249,19 +258,7 @@ async fn import_time(
     best_time: &str,
     best_time_date: NaiveDate,
 ) {
-    let best_time_minute = best_time.split(':').next().unwrap().parse::<i32>().unwrap();
-    let best_time_second = best_time
-        .split(':')
-        .nth(1)
-        .unwrap()
-        .split('.')
-        .next()
-        .unwrap()
-        .parse::<i32>()
-        .unwrap();
-    let best_time_milisecond = best_time.split('.').last().unwrap().parse::<i32>().unwrap();
-    let best_time: i32 =
-        best_time_minute * 60000 + best_time_second * 1000 + best_time_milisecond * 10;
+    let best_time_msecs = time_to_miliseconds(best_time);
 
     sqlx::query(
         "
@@ -274,7 +271,7 @@ async fn import_time(
     .bind(style)
     .bind(distance)
     .bind(course)
-    .bind(best_time)
+    .bind(best_time_msecs)
     .bind(best_time_date)
     .execute(conn)
     .await
@@ -340,6 +337,7 @@ async fn import_meet_results(
 ) -> impl Responder {
     let cell_selector = Selector::parse(r#"table > tbody > tr > td"#).unwrap();
     let name_selector = Selector::parse(r#"b"#).unwrap();
+    let re = Regex::new(r"^[0-5][0-9]:[0-5][0-9].[0-9]{2}\s$").unwrap();
 
     for mut results_file in form.files {
         let mut raw_results = Vec::new();
@@ -351,43 +349,78 @@ async fn import_meet_results(
 
         let html = Html::parse_document(str_results);
         let mut column_idx = 0;
-        let mut skip = false;
+        let mut skip_swimmer = false;
+
+        let mut swimmer_time: SwimmerTime = SwimmerTime {
+            swimmer: Swimmer {
+                id: String::new(),
+                first_name: String::new(),
+                last_name: String::new(),
+                gender: String::new(),
+                birth_date: NaiveDate::MIN,
+            },
+            style: String::new(),
+            distance: 0,
+            course: String::new(),
+            time: 0,
+            time_date: NaiveDate::MIN,
+        };
+
         for content in html.select(&cell_selector) {
-            let mut found_name = false;
+            let mut skip_name = false;
 
             for name in content.select(&name_selector) {
                 let name_cell = name.inner_html();
                 let full_name = name_cell.split(',').next();
-                match search_swimmer_by_name(&state.as_ref().pool, full_name.unwrap().to_string())
-                    .await
+                match search_swimmer_by_name(&state.as_ref().pool, full_name.unwrap().to_string()).await
                 {
                     Ok(swimmer) => {
                         println!(
-                            "Swimmer: {:?} : {} {}",
-                            swimmer.id, swimmer.first_name, swimmer.last_name
+                            "Swimmer: {:?} : {} {} : {}",
+                            swimmer.id, swimmer.first_name, swimmer.last_name, name_cell.split(' ').last().unwrap()
                         );
-                        found_name = true;
-                        skip = false;
+                        swimmer_time.swimmer = swimmer;
+                        skip_name = true;
+                        skip_swimmer = false;
                     }
                     Err(e) => { 
-                        log::error!("Swimmer '{}' not found: {}", name_cell, e);
-                        skip = true;
+                        log::warn!("Swimmer '{}' not found: {}", name_cell, e);
+                        skip_swimmer = true;
                     }
                 };
             }
 
-            if !found_name && !skip {
-                let cell = content.inner_html();
-                if cell != "&nbsp;" {
-                    print!("{:?},", cell);
-                    column_idx += 1;
+            if skip_name || skip_swimmer {
+                continue
+            }
+
+            let cell = content.inner_html();
+
+            if cell == "&nbsp;" {
+                column_idx = 5;
+            }
+
+            if column_idx == 5 {
+                column_idx = 0;
+                continue;
+            }
+
+            println!("{} at {}", cell, column_idx);
+
+            if column_idx == 0 && re.is_match(&cell) {
+                let result_time = &cell[..8];
+                swimmer_time.time = time_to_miliseconds(result_time);
+
+                if cell.ends_with('L') {
+                    swimmer_time.course = "LONG".to_string();
                 }
 
-                if column_idx == 6 {
-                    println!();
-                    column_idx = 0;
+                if cell.ends_with('S') {
+                    swimmer_time.course = "SHORT".to_string();
                 }
             }
+            
+            column_idx += 1;
         }
         log::info!("File name: {}", results_file.file_name.unwrap());
     }
@@ -397,6 +430,36 @@ async fn import_meet_results(
     HttpResponse::Ok()
         .content_type("text/html; charset=utf-8")
         .body(TEMPLATES.render("results.html", &context).unwrap())
+}
+
+/// Converts text in the format mm:ss.ms to miliseconds.
+fn time_to_miliseconds(time: &str) -> i32 {
+    if time.is_empty() {
+        return 0
+    }
+
+    let time_minute = match time.split(':').next() {
+        Some(s) => match s.parse::<i32>() {
+            Ok(i) => i,
+            Err(e) => {
+                log::error!("Error: {} {}", e, s);
+                0
+            }
+        },
+        None => 0,
+    };
+    
+    let time_second = time
+        .split(':')
+        .nth(1)
+        .unwrap()
+        .split('.')
+        .next()
+        .unwrap()
+        .parse::<i32>()
+        .unwrap();
+    let time_milisecond = time.split('.').last().unwrap().parse::<i32>().unwrap();
+    time_minute * 60000 + time_second * 1000 + time_milisecond * 10
 }
 
 #[tokio::main]

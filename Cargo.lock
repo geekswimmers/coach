@@ -566,6 +566,7 @@ dependencies = [
  "env_logger",
  "lazy_static",
  "log",
+ "regex",
  "scraper",
  "serde",
  "sqlx",
