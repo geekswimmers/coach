@@ -397,7 +397,7 @@ async fn import_meet_results(
             let cell = content.inner_html();
 
             if cell == "&nbsp;" {
-                column_idx = 5;
+                column_idx = 5; // so it enters the next condition.
             }
 
             if column_idx == 5 {
@@ -405,19 +405,26 @@ async fn import_meet_results(
                 continue;
             }
 
-            println!("{} at {}", cell, column_idx);
-
-            if column_idx == 0 && re.is_match(&cell) {
-                let result_time = &cell[..8];
-                swimmer_time.time = time_to_miliseconds(result_time);
-
-                if cell.ends_with('L') {
-                    swimmer_time.course = "LONG".to_string();
+            match column_idx {
+                0 => {
+                    if re.is_match(&cell) {
+                        let result_time = &cell[..8];
+                        swimmer_time.time = time_to_miliseconds(result_time);
+        
+                        if cell.ends_with('L') {
+                            swimmer_time.course = "LONG".to_string();
+                        }
+        
+                        if cell.ends_with('S') {
+                            swimmer_time.course = "SHORT".to_string();
+                        }
+                    }
+                },
+                2 => {
+                    println!("{}", cell);
+                    swimmer_time.swimmer.gender = cell.split(' ').next().unwrap().to_uppercase();
                 }
-
-                if cell.ends_with('S') {
-                    swimmer_time.course = "SHORT".to_string();
-                }
+                _ => (),
             }
             
             column_idx += 1;
