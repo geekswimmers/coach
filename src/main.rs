@@ -426,8 +426,8 @@ async fn import_meet_results(
                     swimmer_time.distance = match cell.split(' ').nth(1).unwrap().parse() {
                         Ok(d) => d,
                         Err(e) => {
-                            panic!("Error parsing distance of {}: {}", swimmer_time.swimmer.first_name, e);
-                            //0
+                            log::error!("Error parsing distance of {}: {}", swimmer_time.swimmer.first_name, e);
+                            0
                         }
                     };
                     swimmer_time.style = convert_style(cell.split(' ').last().unwrap()).to_string();
