@@ -335,6 +335,7 @@ async fn import_meet_results(
     let re = Regex::new(r"^[0-5][0-9]:[0-5][0-9].[0-9]{2}\s$").unwrap();
 
     for mut results_file in form.files {
+        println!("{}", results_file.file_name.clone().unwrap());
         let mut raw_results = Vec::new();
         results_file
             .file
@@ -422,7 +423,13 @@ async fn import_meet_results(
                 2 => {
                     println!("{}", cell);
                     swimmer_time.swimmer.gender = cell.split(' ').next().unwrap().to_uppercase();
-                    swimmer_time.distance = cell.split(' ').nth(1).unwrap().parse().unwrap();
+                    swimmer_time.distance = match cell.split(' ').nth(1).unwrap().parse() {
+                        Ok(d) => d,
+                        Err(e) => {
+                            panic!("Error parsing distance of {}: {}", swimmer_time.swimmer.first_name, e);
+                            //0
+                        }
+                    };
                     swimmer_time.style = convert_style(cell.split(' ').last().unwrap()).to_string();
                 }
                 _ => (),
@@ -471,7 +478,7 @@ fn time_to_miliseconds(time: &str) -> i32 {
 }
 
 fn convert_style(style: &str) -> &str {
-    return match style {
+    match style {
         "Fr"     => "FREESTYLE",
         "Free"   => "FREESTYLE",
         "Bk"     => "BACKSTROKE",
@@ -483,7 +490,7 @@ fn convert_style(style: &str) -> &str {
         "IM"     => "MEDLEY",
         "I.M"    => "MEDLEY",
         &_ => "",
-    };
+    }
 }
 
 #[tokio::main]
