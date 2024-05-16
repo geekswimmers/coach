@@ -370,20 +370,21 @@ async fn import_meet_results(
 
             // Iterate for every <td> found.
             for cell in row.select(&cell_selector) {
-
                 // Iterate for every <b> found inside <td>
                 for name in cell.select(&name_selector) {
                     let name_cell = name.inner_html();
                     let full_name = name_cell.split(',').next();
                     match search_swimmer_by_name(
-                        &state.as_ref().pool, 
-                        full_name.unwrap().to_string()
-                    ).await {
+                        &state.as_ref().pool,
+                        full_name.unwrap().to_string(),
+                    )
+                    .await
+                    {
                         Ok(s) => {
                             swimmer = s;
                             valid_swimmer = true;
                             name_row = true;
-                        },
+                        }
                         Err(e) => {
                             log::warn!("Swimmer '{}' not found: {}", name_cell, e);
                             swimmer = Swimmer {
@@ -419,22 +420,27 @@ async fn import_meet_results(
                             if value.ends_with('S') {
                                 swimmer_time.course = "SHORT".to_string();
                             }
-                        }
-                        else {
+                        } else {
                             valid_row = false;
                         }
                     }
                     2 => {
-                        swimmer_time.swimmer.gender = value.split(' ').next().unwrap().to_uppercase();
+                        swimmer_time.swimmer.gender =
+                            value.split(' ').next().unwrap().to_uppercase();
                         swimmer_time.distance = match value.split(' ').nth(1).unwrap().parse() {
                             Ok(d) => d,
                             Err(e) => {
-                                log::error!("Error parsing distance of {}: {}", swimmer_time.swimmer.first_name, e);
+                                log::error!(
+                                    "Error parsing distance of {}: {}",
+                                    swimmer_time.swimmer.first_name,
+                                    e
+                                );
                                 valid_row = false;
                                 0
                             }
                         };
-                        swimmer_time.style = convert_style(value.split(' ').last().unwrap()).to_string();
+                        swimmer_time.style =
+                            convert_style(value.split(' ').last().unwrap()).to_string();
                     }
                     _ => (),
                 }
@@ -497,16 +503,16 @@ fn time_to_miliseconds(time: &str) -> i32 {
 
 fn convert_style(style: &str) -> &str {
     match style {
-        "Fr"     => "FREESTYLE",
-        "Free"   => "FREESTYLE",
-        "Bk"     => "BACKSTROKE",
-        "Back"   => "BACKSTROKE",
-        "Br"     => "BREASTSTROKE",
+        "Fr" => "FREESTYLE",
+        "Free" => "FREESTYLE",
+        "Bk" => "BACKSTROKE",
+        "Back" => "BACKSTROKE",
+        "Br" => "BREASTSTROKE",
         "Breast" => "BREASTSTROKE",
-        "FL"     => "BUTTERFLY",
-        "Fly"    => "BUTTERFLY",
-        "IM"     => "MEDLEY",
-        "I.M"    => "MEDLEY",
+        "FL" => "BUTTERFLY",
+        "Fly" => "BUTTERFLY",
+        "IM" => "MEDLEY",
+        "I.M" => "MEDLEY",
         &_ => "",
     }
 }
