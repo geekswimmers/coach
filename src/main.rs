@@ -84,6 +84,22 @@ async fn home_view() -> impl Responder {
         .body(TEMPLATES.render("index.html", &context).unwrap())
 }
 
+async fn meets_view() -> impl Responder {
+    let context = Context::new();
+
+    HttpResponse::Ok()
+        .content_type("text/html; charset=utf-8")
+        .body(TEMPLATES.render("meets.html", &context).unwrap())
+}
+
+async fn swimmers_view() -> impl Responder {
+    let context = Context::new();
+
+    HttpResponse::Ok()
+        .content_type("text/html; charset=utf-8")
+        .body(TEMPLATES.render("swimmers.html", &context).unwrap())
+}
+
 async fn import_meet_entries(
     state: web::Data<AppState>,
     MultipartForm(form): MultipartForm<MeetEntriesUploadForm>,
@@ -539,6 +555,8 @@ async fn main() -> std::io::Result<()> {
             .wrap(Logger::default())
             .service(fs::Files::new("/static", "./static").show_files_listing())
             .route("/", web::get().to(home_view))
+            .route("/meets", web::get().to(meets_view))
+            .route("/swimmers", web::get().to(swimmers_view))
             .route("/meet/entries", web::post().to(import_meet_entries))
             .route("/meet/results", web::post().to(import_meet_results))
             .app_data(data_app_state.clone())
