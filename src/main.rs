@@ -57,7 +57,7 @@ struct MeetForm {
     id: String,
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, Clone)]
 struct Swimmer {
     id: String,
     first_name: String,
@@ -330,114 +330,132 @@ async fn import_meet_results(
     state: web::Data<AppState>,
     MultipartForm(form): MultipartForm<MeetResultsForm>,
 ) -> impl Responder {
-    let cell_selector = Selector::parse(r#"table > tbody > tr > td"#).unwrap();
+    let row_selector = Selector::parse(r#"table > tbody > tr"#).unwrap();
+    let cell_selector = Selector::parse(r#"td"#).unwrap();
     let name_selector = Selector::parse(r#"b"#).unwrap();
-    let re = Regex::new(r"^[0-5][0-9]:[0-5][0-9].[0-9]{2}\s$").unwrap();
+    let re = Regex::new(r"^[0-5][0-9]:[0-5][0-9].[0-9]{2}\S$").unwrap();
 
     for mut results_file in form.files {
-        println!("{}", results_file.file_name.clone().unwrap());
+        println!("File: {}", results_file.file_name.clone().unwrap());
         let mut raw_results = Vec::new();
         results_file
             .file
             .read_to_end(&mut raw_results)
             .expect("Unable to read");
         let str_results = unsafe { from_utf8_unchecked(&raw_results) };
-
-        let html = Html::parse_document(str_results);
-        let mut column_idx = 0;
-        let mut skip_swimmer = false;
-
-        let mut swimmer_time: SwimmerTime = SwimmerTime {
-            swimmer: Swimmer {
-                id: String::new(),
-                first_name: String::new(),
-                last_name: String::new(),
-                gender: String::new(),
-                birth_date: NaiveDate::MIN,
-            },
-            style: String::new(),
-            distance: 0,
-            course: String::new(),
-            time: 0,
-            time_date: NaiveDate::MIN,
+        let mut swimmer = Swimmer {
+            id: String::new(),
+            first_name: String::new(),
+            last_name: String::new(),
+            gender: String::new(),
+            birth_date: NaiveDate::MIN,
         };
+        let html = Html::parse_document(str_results);
+        let mut valid_swimmer = true;
 
-        for content in html.select(&cell_selector) {
-            let mut skip_name = false;
+        // Iterate for every <tr> found.
+        for row in html.select(&row_selector) {
+            let mut cell_idx = 0;
+            let mut name_row = false;
+            let mut valid_row = true;
 
-            for name in content.select(&name_selector) {
-                let name_cell = name.inner_html();
-                let full_name = name_cell.split(',').next();
-                match search_swimmer_by_name(&state.as_ref().pool, full_name.unwrap().to_string())
-                    .await
-                {
-                    Ok(swimmer) => {
-                        println!(
-                            "Swimmer: {:?} : {} {} : {}",
-                            swimmer.id,
-                            swimmer.first_name,
-                            swimmer.last_name,
-                            name_cell.split(' ').last().unwrap()
-                        );
-                        swimmer_time.swimmer = swimmer;
-                        skip_name = true;
-                        skip_swimmer = false;
-                    }
-                    Err(e) => {
-                        log::warn!("Swimmer '{}' not found: {}", name_cell, e);
-                        skip_swimmer = true;
-                    }
-                };
-            }
+            let mut swimmer_time: SwimmerTime = SwimmerTime {
+                swimmer: swimmer.clone(),
+                style: String::new(),
+                distance: 0,
+                course: String::new(),
+                time: 0,
+                time_date: NaiveDate::MIN,
+            };
 
-            if skip_name || skip_swimmer {
-                continue;
-            }
+            // Iterate for every <td> found.
+            for cell in row.select(&cell_selector) {
 
-            let cell = content.inner_html();
-
-            if cell == "&nbsp;" {
-                column_idx = 5; // so it enters the next condition.
-            }
-
-            if column_idx == 5 {
-                column_idx = 0;
-                continue;
-            }
-
-            match column_idx {
-                0 => {
-                    if re.is_match(&cell) {
-                        let result_time = &cell[..8];
-                        swimmer_time.time = time_to_miliseconds(result_time);
-
-                        if cell.ends_with('L') {
-                            swimmer_time.course = "LONG".to_string();
-                        }
-
-                        if cell.ends_with('S') {
-                            swimmer_time.course = "SHORT".to_string();
-                        }
-                    }
-                }
-                2 => {
-                    println!("{}", cell);
-                    swimmer_time.swimmer.gender = cell.split(' ').next().unwrap().to_uppercase();
-                    swimmer_time.distance = match cell.split(' ').nth(1).unwrap().parse() {
-                        Ok(d) => d,
+                // Iterate for every <b> found inside <td>
+                for name in cell.select(&name_selector) {
+                    let name_cell = name.inner_html();
+                    let full_name = name_cell.split(',').next();
+                    match search_swimmer_by_name(
+                        &state.as_ref().pool, 
+                        full_name.unwrap().to_string()
+                    ).await {
+                        Ok(s) => {
+                            swimmer = s;
+                            valid_swimmer = true;
+                            name_row = true;
+                        },
                         Err(e) => {
-                            log::error!("Error parsing distance of {}: {}", swimmer_time.swimmer.first_name, e);
-                            0
+                            log::warn!("Swimmer '{}' not found: {}", name_cell, e);
+                            swimmer = Swimmer {
+                                id: String::new(),
+                                first_name: String::new(),
+                                last_name: String::new(),
+                                gender: String::new(),
+                                birth_date: NaiveDate::MIN,
+                            };
+                            valid_swimmer = false;
+                            break;
                         }
                     };
-                    swimmer_time.style = convert_style(cell.split(' ').last().unwrap()).to_string();
+                    continue;
                 }
-                _ => (),
+
+                if !valid_swimmer || name_row || !valid_row {
+                    break;
+                }
+
+                let value = cell.inner_html();
+
+                match cell_idx {
+                    0 => {
+                        if re.is_match(&value) {
+                            let result_time = &value[..8];
+                            swimmer_time.time = time_to_miliseconds(result_time);
+
+                            if value.ends_with('L') {
+                                swimmer_time.course = "LONG".to_string();
+                            }
+
+                            if value.ends_with('S') {
+                                swimmer_time.course = "SHORT".to_string();
+                            }
+                        }
+                        else {
+                            valid_row = false;
+                        }
+                    }
+                    2 => {
+                        swimmer_time.swimmer.gender = value.split(' ').next().unwrap().to_uppercase();
+                        swimmer_time.distance = match value.split(' ').nth(1).unwrap().parse() {
+                            Ok(d) => d,
+                            Err(e) => {
+                                log::error!("Error parsing distance of {}: {}", swimmer_time.swimmer.first_name, e);
+                                valid_row = false;
+                                0
+                            }
+                        };
+                        swimmer_time.style = convert_style(value.split(' ').last().unwrap()).to_string();
+                    }
+                    _ => (),
+                }
+
+                cell_idx += 1;
             }
 
-            column_idx += 1;
+            if valid_swimmer && !name_row && valid_row {
+                println!(
+                    "Swimmer: {} : {} {} : {} : {} : {} : {} : {}",
+                    swimmer_time.swimmer.id,
+                    swimmer_time.swimmer.first_name,
+                    swimmer_time.swimmer.last_name,
+                    swimmer_time.time,
+                    swimmer_time.course,
+                    swimmer_time.swimmer.gender,
+                    swimmer_time.distance,
+                    swimmer_time.style,
+                );
+            }
         }
-        log::info!("File name: {}", results_file.file_name.unwrap());
     }
 
     let context = Context::new();
