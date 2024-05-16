@@ -12,7 +12,7 @@ use actix_multipart::form::MultipartForm;
 use actix_web::middleware::Logger;
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use chrono::{NaiveDate, ParseError};
-use coach::config::{load_config, Config};
+use coach::config::load_config;
 use env_logger::Env;
 use regex::Regex;
 use scraper::{Html, Selector};
@@ -36,7 +36,6 @@ lazy_static! {
 }
 
 struct AppState {
-    config: Config,
     pool: PgPool,
 }
 
@@ -547,7 +546,7 @@ async fn main() -> std::io::Result<()> {
         .await
         .expect("Failed to migrate database");
 
-    let app_state = AppState { config, pool };
+    let app_state = AppState { pool };
     let data_app_state = web::Data::new(app_state);
 
     HttpServer::new(move || {
