@@ -91,8 +91,24 @@ async fn meets_view() -> impl Responder {
         .body(TEMPLATES.render("meets.html", &context).unwrap())
 }
 
-async fn swimmers_view() -> impl Responder {
-    let context = Context::new();
+async fn swimmers_view(state: web::Data<AppState>) -> impl Responder {
+    let swimmers = sqlx::query("
+            select id, name_first, name_last, gender, birth_date 
+            from swimmer
+            order by name_first, name_last
+        ")
+        .map(|row: PgRow| Swimmer {
+                id: row.get("id"),
+                first_name: row.get("name_first"),
+                last_name: row.get("name_last"),
+                gender: row.get("gender"),
+                birth_date: row.get("birth_date")
+        })
+        .fetch_all(&state.get_ref().pool)
+        .await.expect("Failed to fetch events");
+
+    let mut context = Context::new();
+    context.insert("swimmers", &swimmers);
 
     HttpResponse::Ok()
         .content_type("text/html; charset=utf-8")
@@ -144,7 +160,7 @@ async fn import_swimmer(
     row: &csv::StringRecord,
     row_num: usize,
 ) -> Result<String, ParseError> {
-    let swimmer_id = row.get(0).unwrap();
+    let swimmer_id = row.get(0).unwrap().trim();
     let full_name = row.get(4).unwrap();
     let last_name = full_name.split(' ').next();
     let first_name = full_name.split(' ').last();
