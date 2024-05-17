@@ -1,4 +1,9 @@
 {% extends "layout.html" %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item active" aria-current="page">Swimmers</li>
+{% endblock %}
+
 {% block content %}
     <div class="card">
         <div class="card-body">
@@ -21,6 +26,10 @@
                         <td>{{ swimmer.first_name }} {{ swimmer.last_name }}</td>
                         <td>{{ swimmer.gender | title }}</td>
                         <td>{{ swimmer.birth_date | date(format="%B %e, %Y") }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="4">No registered swimmers.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
