@@ -2,25 +2,41 @@
 {% block content %}
     <div class="card">
         <div class="card-body">
-            <h5 class="display-5">Check Meet Results</h5>
-            <p class="card-text">Visit <a href="https://www.swimming.ca/en/events-results/meet-results/" target="_blank" rel="noopener noreferrer">Swimming Canada Results</a> page, find the meet and provide some information about it.</p>
+            <h5 class="display-5">Meet</h5>
+            <p class="card-text">Visit <a href="https://www.swimming.ca/en/events-results/meet-results/" target="_blank" rel="noopener noreferrer">Swimming Canada Results</a>, find the meet, and use the information to complete this form.</p>
             
-            <form id="meet-form" method="post" action="/meet/results">
-                <div class="mb-3">
-                    <label for="name" class="form-label">Name</label>
-                    <input type="text" class="form-control" id="name" name="name">
+            <form id="meet-form" method="post" action="/meets/new">
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="mb-3">
+                            <label for="id" class="form-label">Swimming Canada ID</label>
+                            <input type="text" class="form-control" id="id" name="id">
+                            <div id="idHelp" class="form-text">The number located close to the meet's name.</div>
+                        </div>
+                    </div>
+                    <div class="col-md-9">
+                        <div class="mb-3">
+                            <label for="name" class="form-label">Name</label>
+                            <input type="text" class="form-control" id="name" name="name">
+                        </div>
+                    </div>    
                 </div>
-
-                <div class="mb-3">
-                    <label for="name" class="form-label">ID</label>
-                    <input type="text" class="form-control" id="id" name="id">
-                    <div id="emailHelp" class="form-text">The number located close to the meet's name.</div>
-                </div>
-                    
-                <div class="mb-3">
-                    <label for="date" class="form-label">Last Day of the Meet</label>
-                    <input type="date" class="form-control" id="date" name="date">
-                    <div id="emailHelp" class="form-text">Meets can happen in one or multiple days. Inform just the last day of the meet.</div>
+                
+                <div class="row">
+                    <div class="col">
+                        <div class="mb-3">
+                            <label for="start" class="form-label">Start</label>
+                            <input type="date" class="form-control" id="start_date" name="start_date">
+                            <div id="startDateHelp" class="form-text">Meets can happen in one or multiple days. Inform the first day of the meet.</div>
+                        </div>
+                    </div>
+                    <div class="col">
+                        <div class="mb-3">
+                            <label for="end" class="form-label">End</label>
+                            <input type="date" class="form-control" id="end_date" name="end_date">
+                            <div id="endDateHelp" class="form-text">Inform the last day of the meet.</div>
+                        </div>
+                    </div>
                 </div>
 
                 <button type="submit" id="submit" class="btn btn-primary">

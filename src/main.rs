@@ -10,6 +10,7 @@ use actix_files as fs;
 use actix_multipart::form::tempfile::TempFile;
 use actix_multipart::form::MultipartForm;
 use actix_web::middleware::Logger;
+use actix_web::web::Redirect;
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use chrono::{NaiveDate, ParseError};
 use coach::config::load_config;
@@ -75,7 +76,7 @@ struct SwimmerTime {
     time_date: NaiveDate,
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, Deserialize)]
 struct Meet {
     id: String,
     name: String,
@@ -122,6 +123,25 @@ async fn meets_new_view() -> impl Responder {
     HttpResponse::Ok()
         .content_type("text/html; charset=utf-8")
         .body(TEMPLATES.render("meet_form.html", &context).unwrap())
+}
+
+async fn meets_new(form: web::Form<Meet>, state: web::Data<AppState>) -> impl Responder {
+    sqlx::query(
+        "
+            insert into meet (id, name, start_date, end_date) 
+            values ($1, $2, $3, $4)
+            on conflict do nothing
+        ",
+    )
+    .bind(form.id.as_str())
+    .bind(form.name.as_str())
+    .bind(form.start_date)
+    .bind(form.end_date)
+    .execute(&state.get_ref().pool)
+    .await
+    .expect("Error inserting a meet.");
+
+    Redirect::to("/meets").see_other()
 }
 
 async fn swimmers_view(state: web::Data<AppState>) -> impl Responder {
@@ -608,6 +628,7 @@ async fn main() -> std::io::Result<()> {
             .route("/", web::get().to(home_view))
             .route("/meets", web::get().to(meets_view))
             .route("/meets/new", web::get().to(meets_new_view))
+            .route("/meets/new", web::post().to(meets_new))
             .route("/swimmers", web::get().to(swimmers_view))
             .route("/meet/entries", web::post().to(import_meet_entries))
             .route("/meet/results", web::post().to(import_meet_results))
