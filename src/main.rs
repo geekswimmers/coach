@@ -75,6 +75,14 @@ struct SwimmerTime {
     time_date: NaiveDate,
 }
 
+#[derive(serde::Serialize)]
+struct Meet {
+    id: String,
+    name: String,
+    start_date: NaiveDate,
+    end_date: NaiveDate,
+}
+
 async fn home_view() -> impl Responder {
     let context = Context::new();
 
@@ -83,8 +91,26 @@ async fn home_view() -> impl Responder {
         .body(TEMPLATES.render("index.html", &context).unwrap())
 }
 
-async fn meets_view() -> impl Responder {
-    let context = Context::new();
+async fn meets_view(state: web::Data<AppState>) -> impl Responder {
+    let meets = sqlx::query(
+        "
+            select id, name, start_date, end_date 
+            from meet
+            order by end_date desc
+        ",
+    )
+    .map(|row: PgRow| Meet {
+        id: row.get("id"),
+        name: row.get("name"),
+        start_date: row.get("start_date"),
+        end_date: row.get("end_date"),
+    })
+    .fetch_all(&state.get_ref().pool)
+    .await
+    .expect("Failed to fetch meets");
+
+    let mut context = Context::new();
+    context.insert("meets", &meets);
 
     HttpResponse::Ok()
         .content_type("text/html; charset=utf-8")
@@ -108,7 +134,7 @@ async fn swimmers_view(state: web::Data<AppState>) -> impl Responder {
     })
     .fetch_all(&state.get_ref().pool)
     .await
-    .expect("Failed to fetch events");
+    .expect("Failed to fetch swimmers");
 
     let mut context = Context::new();
     context.insert("swimmers", &swimmers);
@@ -367,7 +393,7 @@ async fn import_meet_results(
     let row_selector = Selector::parse(r#"table > tbody > tr"#).unwrap();
     let cell_selector = Selector::parse(r#"td"#).unwrap();
     let name_selector = Selector::parse(r#"b"#).unwrap();
-    let re = Regex::new(r"^[0-5][0-9]:[0-5][0-9].[0-9]{2}\S$").unwrap();
+    let re_time = Regex::new(r"^[0-5][0-9]:[0-5][0-9].[0-9]{2}\S$").unwrap();
 
     for mut results_file in form.files {
         println!("File: {}", results_file.file_name.clone().unwrap());
@@ -387,7 +413,7 @@ async fn import_meet_results(
         let html = Html::parse_document(str_results);
         let mut valid_swimmer = true;
 
-        // Iterate for every <tr> found.
+        // Iterate over the <tr> found.
         for row in html.select(&row_selector) {
             let mut cell_idx = 0;
             let mut name_row = false;
@@ -402,9 +428,9 @@ async fn import_meet_results(
                 time_date: NaiveDate::MIN,
             };
 
-            // Iterate for every <td> found.
+            // Iterate over the <td> found within the <tr>.
             for cell in row.select(&cell_selector) {
-                // Iterate for every <b> found inside <td>
+                // Iterate over the <b> found inside <td>.
                 for name in cell.select(&name_selector) {
                     let name_cell = name.inner_html();
                     let full_name = name_cell.split(',').next();
@@ -442,8 +468,8 @@ async fn import_meet_results(
                 let value = cell.inner_html();
 
                 match cell_idx {
-                    0 => {
-                        if re.is_match(&value) {
+                    0 => { // the first column
+                        if re_time.is_match(&value) {
                             let result_time = &value[..8];
                             swimmer_time.time = time_to_miliseconds(result_time);
 
@@ -458,7 +484,7 @@ async fn import_meet_results(
                             valid_row = false;
                         }
                     }
-                    2 => {
+                    2 => { // the third column
                         swimmer_time.swimmer.gender =
                             value.split(' ').next().unwrap().to_uppercase();
                         swimmer_time.distance = match value.split(' ').nth(1).unwrap().parse() {

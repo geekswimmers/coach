@@ -15,17 +15,23 @@
                     <tr>
                         <th scope="col">#</th>
                         <th scope="col">Name</th>
-                        <th scope="col">Date</th>
-                        <th scope="col">Location</th>
+                        <th scope="col">Start</th>
+                        <th scope="col">End</th>
                     </tr>
                 </thead>
                 <tbody>
+                    {% for meet in meets %}
                     <tr>
-                        <th scope="row">1</th>
-                        <td>Mark</td>
-                        <td>Otto</td>
-                        <td>@mdo</td>
+                        <td>{{ meet.id }}</td>
+                        <td>{{ meet.name }}</td>
+                        <td>{{ meet.start_date | date(format="%B %e, %Y") }}</td>
+                        <td>{{ meet.end_date | date(format="%B %e, %Y") }}</td>
                     </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="4">No registered meets.</td>
+                    </tr>
+                    {% endfor %}
                 </tbody>
             </table>
         </div>
