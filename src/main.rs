@@ -92,20 +92,23 @@ async fn meets_view() -> impl Responder {
 }
 
 async fn swimmers_view(state: web::Data<AppState>) -> impl Responder {
-    let swimmers = sqlx::query("
+    let swimmers = sqlx::query(
+        "
             select id, name_first, name_last, gender, birth_date 
             from swimmer
             order by name_first, name_last
-        ")
-        .map(|row: PgRow| Swimmer {
-                id: row.get("id"),
-                first_name: row.get("name_first"),
-                last_name: row.get("name_last"),
-                gender: row.get("gender"),
-                birth_date: row.get("birth_date")
-        })
-        .fetch_all(&state.get_ref().pool)
-        .await.expect("Failed to fetch events");
+        ",
+    )
+    .map(|row: PgRow| Swimmer {
+        id: row.get("id"),
+        first_name: row.get("name_first"),
+        last_name: row.get("name_last"),
+        gender: row.get("gender"),
+        birth_date: row.get("birth_date"),
+    })
+    .fetch_all(&state.get_ref().pool)
+    .await
+    .expect("Failed to fetch events");
 
     let mut context = Context::new();
     context.insert("swimmers", &swimmers);
