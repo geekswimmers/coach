@@ -117,6 +117,13 @@ async fn meets_view(state: web::Data<AppState>) -> impl Responder {
         .body(TEMPLATES.render("meets.html", &context).unwrap())
 }
 
+async fn meets_new_view() -> impl Responder {
+    let context = Context::new();
+    HttpResponse::Ok()
+        .content_type("text/html; charset=utf-8")
+        .body(TEMPLATES.render("meet_form.html", &context).unwrap())
+}
+
 async fn swimmers_view(state: web::Data<AppState>) -> impl Responder {
     let swimmers = sqlx::query(
         "
@@ -600,6 +607,7 @@ async fn main() -> std::io::Result<()> {
             .service(fs::Files::new("/static", "./static").show_files_listing())
             .route("/", web::get().to(home_view))
             .route("/meets", web::get().to(meets_view))
+            .route("/meets/new", web::get().to(meets_new_view))
             .route("/swimmers", web::get().to(swimmers_view))
             .route("/meet/entries", web::post().to(import_meet_entries))
             .route("/meet/results", web::post().to(import_meet_results))
