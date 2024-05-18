@@ -140,6 +140,16 @@ async fn meets_entries_form_view(path: web::Path<MeetPath>, state: web::Data<App
         .body(TEMPLATES.render("entries.html", &context).unwrap())
 }
 
+async fn meets_results_form_view(path: web::Path<MeetPath>, state: web::Data<AppState>) -> impl Responder {
+    let meet = find_meet(&state.get_ref().pool, &path.id).await;
+
+    let mut context = Context::new();
+    context.insert("meet", &meet);
+    HttpResponse::Ok()
+        .content_type("text/html; charset=utf-8")
+        .body(TEMPLATES.render("results.html", &context).unwrap())
+}
+
 async fn meets_new(form: web::Form<Meet>, state: web::Data<AppState>) -> impl Responder {
     sqlx::query(
         "
@@ -682,7 +692,7 @@ async fn main() -> std::io::Result<()> {
             .route("/meets/{id}/", web::get().to(meet_view))
             .route("/meets/{id}/entries", web::get().to(meets_entries_form_view))
             .route("/meets/{id}/entries/load", web::post().to(import_meet_entries))
-            .route("/meets/{id}/results", web::get().to(import_meet_entries))
+            .route("/meets/{id}/results", web::get().to(meets_results_form_view))
             .route("/meets/{id}/results/load", web::post().to(import_meet_results))
             .route("/swimmers", web::get().to(swimmers_view))
             .app_data(data_app_state.clone())
