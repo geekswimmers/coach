@@ -89,7 +89,7 @@ struct SwimmerTime {
     meet: Meet,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 struct Meet {
     id: String,
     name: String,
@@ -111,12 +111,6 @@ impl Meet {
 #[derive(Deserialize)]
 struct MeetPath {
     id: String,
-}
-
-impl MeetPath {
-    fn as_meet(&self) -> Meet {
-        Meet::new(self.id.clone())
-    }
 }
 
 async fn home_view() -> impl Responder {
@@ -509,6 +503,8 @@ async fn import_meet_results(
     state: web::Data<AppState>,
     MultipartForm(form): MultipartForm<MeetResultsForm>,
 ) -> impl Responder {
+    let meet = find_meet(&state.as_ref().pool, &path.id).await;
+
     let row_selector = Selector::parse(r#"table > tbody > tr"#).unwrap();
     let cell_selector = Selector::parse(r#"td"#).unwrap();
     let name_selector = Selector::parse(r#"b"#).unwrap();
@@ -537,6 +533,7 @@ async fn import_meet_results(
             let mut cell_idx = 0;
             let mut name_row = false;
             let mut valid_row = true;
+            let time_date = meet.end_date;
 
             let mut swimmer_time: SwimmerTime = SwimmerTime {
                 swimmer: swimmer.clone(),
@@ -544,8 +541,8 @@ async fn import_meet_results(
                 distance: 0,
                 course: String::new(),
                 time: 0,
-                time_date: NaiveDate::MIN,
-                meet: path.as_meet(),
+                time_date,
+                meet: meet.clone(),
             };
 
             // Iterate over the <td> found within the <tr>.
@@ -629,26 +626,12 @@ async fn import_meet_results(
             }
 
             if valid_swimmer && !name_row && valid_row {
-                println!(
-                    "Swimmer: {} : {} {} : {} : {} : {} : {} : {}",
-                    swimmer_time.swimmer.id,
-                    swimmer_time.swimmer.first_name,
-                    swimmer_time.swimmer.last_name,
-                    swimmer_time.time,
-                    swimmer_time.course,
-                    swimmer_time.swimmer.gender,
-                    swimmer_time.distance,
-                    swimmer_time.style,
-                );
+                import_time(&state.as_ref().pool, &swimmer_time).await;
             }
         }
     }
 
-    let context = Context::new();
-
-    HttpResponse::Ok()
-        .content_type("text/html; charset=utf-8")
-        .body(TEMPLATES.render("results.html", &context).unwrap())
+    Redirect::to(format!("/meets/{}/", meet.id)).see_other()
 }
 
 /// Converts text in the format mm:ss.ms to miliseconds.

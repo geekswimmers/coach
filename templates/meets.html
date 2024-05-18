@@ -28,7 +28,7 @@
                 <tbody>
                     {% for meet in meets %}
                     <tr>
-                        <td>{{ meet.id }}</td>
+                        <td><a href="/meets/{{ meet.id }}/">{{ meet.id }}</a></td>
                         <td>{{ meet.name }}</td>
                         <td>{{ meet.start_date | date(format="%B %e, %Y") }}</td>
                         <td>{{ meet.end_date | date(format="%B %e, %Y") }}</td>
