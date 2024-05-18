@@ -1,0 +1,22 @@
+{% extends "layout.html" %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item active" aria-current="page">Meets</li>
+{% endblock %}
+
+{% block content %}
+    <h5 class="display-5">{{ meet.name }}</h5>
+    <p class="lead">#{{ meet.id }}</p>
+    
+    <div class="card">
+        <div class="card-header">
+            <div class="btn-group" role="group" aria-label="Basic outlined example">
+                <a href="/meets/{{ meet.id }}/entries" class="btn btn-outline-primary">Load Entries</a>
+            </div>
+        </div>
+
+        <div class="card-body">
+            <p>From {{ meet.start_date | date(format="%B %e") }} to {{ meet.end_date | date(format="%B %e, %Y") }}</p>
+        </div>
+    </div>
+{% endblock %}

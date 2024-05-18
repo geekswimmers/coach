@@ -84,6 +84,11 @@ struct Meet {
     end_date: NaiveDate,
 }
 
+#[derive(Deserialize)]
+struct MeetPath {
+    id: String,
+}
+
 async fn home_view() -> impl Responder {
     let context = Context::new();
 
@@ -118,11 +123,21 @@ async fn meets_view(state: web::Data<AppState>) -> impl Responder {
         .body(TEMPLATES.render("meets.html", &context).unwrap())
 }
 
-async fn meets_new_view() -> impl Responder {
+async fn meets_form_view() -> impl Responder {
     let context = Context::new();
     HttpResponse::Ok()
         .content_type("text/html; charset=utf-8")
         .body(TEMPLATES.render("meet_form.html", &context).unwrap())
+}
+
+async fn meets_entries_form_view(path: web::Path<MeetPath>, state: web::Data<AppState>) -> impl Responder {
+    let meet = find_meet(&state.get_ref().pool, &path.id).await;
+
+    let mut context = Context::new();
+    context.insert("meet", &meet);
+    HttpResponse::Ok()
+        .content_type("text/html; charset=utf-8")
+        .body(TEMPLATES.render("entries.html", &context).unwrap())
 }
 
 async fn meets_new(form: web::Form<Meet>, state: web::Data<AppState>) -> impl Responder {
@@ -141,7 +156,38 @@ async fn meets_new(form: web::Form<Meet>, state: web::Data<AppState>) -> impl Re
     .await
     .expect("Error inserting a meet.");
 
-    Redirect::to("/meets").see_other()
+    Redirect::to(format!("/meets/{}/", form.id)).see_other()
+}
+
+async fn find_meet(conn: &PgPool, meet_id: &str) -> Meet {
+    sqlx::query(
+        "
+            select id, name, start_date, end_date 
+            from meet
+            where id = $1
+        ",
+    )
+    .bind(meet_id)
+    .map(|row: PgRow| Meet {
+        id: row.get("id"),
+        name: row.get("name"),
+        start_date: row.get("start_date"),
+        end_date: row.get("end_date"),
+    })
+    .fetch_one(conn)
+    .await
+    .expect("Failed to fetch meet")
+}
+
+async fn meet_view(path: web::Path<MeetPath>, state: web::Data<AppState>) -> impl Responder {
+    let meet = find_meet(&state.get_ref().pool, &path.id).await;
+
+    let mut context = Context::new();
+    context.insert("meet", &meet);
+
+    HttpResponse::Ok()
+        .content_type("text/html; charset=utf-8")
+        .body(TEMPLATES.render("meet.html", &context).unwrap())
 }
 
 async fn swimmers_view(state: web::Data<AppState>) -> impl Responder {
@@ -627,11 +673,14 @@ async fn main() -> std::io::Result<()> {
             .service(fs::Files::new("/static", "./static").show_files_listing())
             .route("/", web::get().to(home_view))
             .route("/meets", web::get().to(meets_view))
-            .route("/meets/new", web::get().to(meets_new_view))
+            .route("/meets/new", web::get().to(meets_form_view))
             .route("/meets/new", web::post().to(meets_new))
+            .route("/meets/{id}/", web::get().to(meet_view))
+            .route("/meets/{id}/entries", web::get().to(meets_entries_form_view))
+            .route("/meets/{id}/entries/load", web::post().to(import_meet_entries))
+            .route("/meets/{id}/results", web::get().to(import_meet_entries))
+            .route("/meets/{id}/results/load", web::post().to(import_meet_results))
             .route("/swimmers", web::get().to(swimmers_view))
-            .route("/meet/entries", web::post().to(import_meet_entries))
-            .route("/meet/results", web::post().to(import_meet_results))
             .app_data(data_app_state.clone())
     })
     .bind(("0.0.0.0", server_port))?
