@@ -218,6 +218,7 @@ async fn swimmers_view(state: web::Data<AppState>) -> impl Responder {
 }
 
 async fn import_meet_entries(
+    path: web::Path<MeetPath>,
     state: web::Data<AppState>,
     MultipartForm(form): MultipartForm<MeetEntriesUploadForm>,
 ) -> impl Responder {
@@ -240,21 +241,18 @@ async fn import_meet_entries(
                         }
                         Err(e) => log::warn!("Failed importing swimmer at line {}: {}", i + 1, e),
                     };
-                    import_times(&state.get_ref().pool, &row, i).await;
+                    import_times(&state.get_ref().pool, &row, i, &path.id).await;
                     num_entries += 1;
                 }
-                Err(e) => log::error!("Error: {}", e),
+                Err(e) => log::warn!("{}", e),
             }
         }
         let elapsed = now.elapsed();
-        register_load(&state.get_ref().pool, swimmers, num_entries, elapsed).await;
+        register_load(&state.get_ref().pool, swimmers, num_entries, elapsed, &path.id).await;
         log::info!("Finished importing meet entries.")
     }
 
-    let context = Context::new();
-    HttpResponse::Ok()
-        .content_type("text/html; charset=utf-8")
-        .body(TEMPLATES.render("meet.html", &context).unwrap())
+    Redirect::to(format!("/meets/{}/", path.id)).see_other()
 }
 
 async fn import_swimmer(
@@ -299,8 +297,8 @@ async fn import_swimmer(
     Ok(swimmer_id.to_string())
 }
 
-async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize) {
-    let swimmer_id = row.get(0).unwrap();
+async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize, meet_id: &str) {
+    let swimmer_id = row.get(0).unwrap().trim();
     let event = row.get(9).unwrap();
     let distance: i32 = event.split(' ').next().unwrap().parse().unwrap();
     let style = convert_style(event.split(' ').last().unwrap());
@@ -338,6 +336,7 @@ async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize) {
             "SHORT",
             best_time_short,
             best_time_short_date,
+            meet_id,
         )
         .await;
     }
@@ -373,6 +372,7 @@ async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize) {
         "LONG",
         best_time_long,
         best_time_long_date,
+        meet_id,
     )
     .await;
 }
@@ -385,13 +385,14 @@ async fn import_time(
     course: &str,
     best_time: &str,
     best_time_date: NaiveDate,
+    meet_id: &str,
 ) {
     let best_time_msecs = time_to_miliseconds(best_time);
 
     sqlx::query(
         "
-        insert into swimmer_time (swimmer, style, distance, course, time_official, time_date)
-        values ($1, $2, $3, $4, $5, $6)
+        insert into swimmer_time (swimmer, style, distance, course, time_official, time_date, meet)
+        values ($1, $2, $3, $4, $5, $6, $7)
         on conflict do nothing
     ",
     )
@@ -401,6 +402,7 @@ async fn import_time(
     .bind(course)
     .bind(best_time_msecs)
     .bind(best_time_date)
+    .bind(meet_id)
     .execute(conn)
     .await
     .expect("Error inserting swimmer's time");
@@ -411,6 +413,7 @@ async fn register_load(
     swimmers: HashSet<String>,
     num_entries: i32,
     duration: Duration,
+    meet_id: &str,
 ) {
     let num_swimmers = swimmers.len() as i32;
     let mut ss: String = String::new();
@@ -422,14 +425,15 @@ async fn register_load(
 
     sqlx::query(
         "
-            insert into entries_load (num_swimmers, num_entries, duration, swimmers)
-            values ($1, $2, $3, $4)
+            insert into entries_load (num_swimmers, num_entries, duration, swimmers, meet)
+            values ($1, $2, $3, $4, $5)
         ",
     )
     .bind(num_swimmers)
     .bind(num_entries)
     .bind(duration.as_millis() as i32)
     .bind(ss)
+    .bind(meet_id)
     .execute(conn)
     .await
     .expect("Error inserting a swimmer");

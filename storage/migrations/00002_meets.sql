@@ -6,3 +6,5 @@ create table if not exists meet (
 );
 
 alter table swimmer_time add meet varchar(32) references meet (id);
+
+alter table entries_load add meet varchar(32) references meet (id);

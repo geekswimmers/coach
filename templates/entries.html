@@ -1,11 +1,11 @@
 {% extends "layout.html" %}
 {% block content %}
     <h5 class="display-5">{{ meet.name }}</h5>
-    <p class="lead">Load Meet Entries</p>
+    <p class="lead">Loading Meet Entries</p>
 
     <div class="card">
         <div class="card-body">
-            <form id="meet-entries-form" method="post" action="/meets/{{ meet.id }}/entries" enctype="multipart/form-data">
+            <form id="meet-entries-form" method="post" action="/meets/{{ meet.id }}/entries/load" enctype="multipart/form-data">
                 <div class="mb-3">
                     <label for="meet-entries-file" class="form-label">Meet Entries</label>
                     <input type="file" class="form-control" id="meet-entries-file" name="meet-entries-file" accept="text/csv">
