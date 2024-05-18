@@ -57,7 +57,7 @@ struct MeetForm {
     id: String,
 }
 
-#[derive(serde::Serialize, Clone)]
+#[derive(Serialize, Clone)]
 struct Swimmer {
     id: String,
     first_name: String,
@@ -66,7 +66,19 @@ struct Swimmer {
     birth_date: NaiveDate,
 }
 
-#[derive(serde::Serialize)]
+impl Swimmer {
+    pub fn new(id: String) -> Self {
+        Self { 
+            id,
+            first_name: String::new(),
+            last_name: String::new(),
+            gender: String::new(),
+            birth_date: NaiveDate::MIN,
+        }
+    }
+}
+
+#[derive(Serialize)]
 struct SwimmerTime {
     swimmer: Swimmer,
     style: String,
@@ -74,9 +86,10 @@ struct SwimmerTime {
     course: String,
     time: i32,
     time_date: NaiveDate,
+    meet: Meet,
 }
 
-#[derive(serde::Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 struct Meet {
     id: String,
     name: String,
@@ -84,9 +97,26 @@ struct Meet {
     end_date: NaiveDate,
 }
 
+impl Meet {
+    pub fn new(id: String) -> Self {
+        Self { 
+            id,
+            name: String::new(),
+            start_date: NaiveDate::MIN,
+            end_date: NaiveDate::MAX,
+        }
+    }
+}
+
 #[derive(Deserialize)]
 struct MeetPath {
     id: String,
+}
+
+impl MeetPath {
+    fn as_meet(&self) -> Meet {
+        Meet::new(self.id.clone())
+    }
 }
 
 async fn home_view() -> impl Responder {
@@ -312,6 +342,18 @@ async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize, me
     let event = row.get(9).unwrap();
     let distance: i32 = event.split(' ').next().unwrap().parse().unwrap();
     let style = convert_style(event.split(' ').last().unwrap());
+    let swimmer = Swimmer::new(swimmer_id.to_string());
+    let meet = Meet::new(meet_id.to_string());
+    
+    let mut swimmer_time: SwimmerTime = SwimmerTime {
+        swimmer,
+        style: style.to_string(),
+        distance,
+        course: String::new(),
+        time: 0,
+        time_date: NaiveDate::MAX,
+        meet,
+    };
 
     let best_time_short = match row.get(12) {
         Some(time) => {
@@ -323,6 +365,7 @@ async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize, me
         }
         None => return,
     };
+
 
     if !best_time_short.is_empty() {
         let best_time_short_date = match NaiveDate::parse_from_str(row.get(13).unwrap(), "%b-%d-%y")
@@ -338,15 +381,13 @@ async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize, me
             }
         };
 
+        swimmer_time.course = "SHORT".to_string();
+        swimmer_time.time = time_to_miliseconds(best_time_short);
+        swimmer_time.time_date = best_time_short_date;
+
         import_time(
             conn,
-            swimmer_id,
-            style,
-            distance,
-            "SHORT",
-            best_time_short,
-            best_time_short_date,
-            meet_id,
+            &swimmer_time,
         )
         .await;
     }
@@ -374,31 +415,21 @@ async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize, me
         }
     };
 
+    swimmer_time.course = "LONG".to_string();
+    swimmer_time.time = time_to_miliseconds(best_time_long);
+    swimmer_time.time_date = best_time_long_date;
+
     import_time(
         conn,
-        swimmer_id,
-        style,
-        distance,
-        "LONG",
-        best_time_long,
-        best_time_long_date,
-        meet_id,
+        &swimmer_time,
     )
     .await;
 }
 
 async fn import_time(
     conn: &PgPool,
-    swimmer_id: &str,
-    style: &str,
-    distance: i32,
-    course: &str,
-    best_time: &str,
-    best_time_date: NaiveDate,
-    meet_id: &str,
+    swimmer_time: &SwimmerTime,
 ) {
-    let best_time_msecs = time_to_miliseconds(best_time);
-
     sqlx::query(
         "
         insert into swimmer_time (swimmer, style, distance, course, time_official, time_date, meet)
@@ -406,13 +437,13 @@ async fn import_time(
         on conflict do nothing
     ",
     )
-    .bind(swimmer_id)
-    .bind(style)
-    .bind(distance)
-    .bind(course)
-    .bind(best_time_msecs)
-    .bind(best_time_date)
-    .bind(meet_id)
+    .bind(&swimmer_time.swimmer.id)
+    .bind(&swimmer_time.style)
+    .bind(swimmer_time.distance)
+    .bind(&swimmer_time.course)
+    .bind(swimmer_time.time)
+    .bind(swimmer_time.time_date)
+    .bind(&swimmer_time.meet.id)
     .execute(conn)
     .await
     .expect("Error inserting swimmer's time");
@@ -474,6 +505,7 @@ async fn search_swimmer_by_name(conn: &PgPool, name: String) -> Result<Swimmer, 
 }
 
 async fn import_meet_results(
+    path: web::Path<MeetPath>,
     state: web::Data<AppState>,
     MultipartForm(form): MultipartForm<MeetResultsForm>,
 ) -> impl Responder {
@@ -513,6 +545,7 @@ async fn import_meet_results(
                 course: String::new(),
                 time: 0,
                 time_date: NaiveDate::MIN,
+                meet: path.as_meet(),
             };
 
             // Iterate over the <td> found within the <tr>.
