@@ -68,7 +68,7 @@ struct Swimmer {
 
 impl Swimmer {
     pub fn new(id: String) -> Self {
-        Self { 
+        Self {
             id,
             first_name: String::new(),
             last_name: String::new(),
@@ -99,7 +99,7 @@ struct Meet {
 
 impl Meet {
     pub fn new(id: String) -> Self {
-        Self { 
+        Self {
             id,
             name: String::new(),
             start_date: NaiveDate::MIN,
@@ -154,7 +154,10 @@ async fn meets_form_view() -> impl Responder {
         .body(TEMPLATES.render("meet_form.html", &context).unwrap())
 }
 
-async fn meets_entries_form_view(path: web::Path<MeetPath>, state: web::Data<AppState>) -> impl Responder {
+async fn meets_entries_form_view(
+    path: web::Path<MeetPath>,
+    state: web::Data<AppState>,
+) -> impl Responder {
     let meet = find_meet(&state.get_ref().pool, &path.id).await;
 
     let mut context = Context::new();
@@ -164,7 +167,10 @@ async fn meets_entries_form_view(path: web::Path<MeetPath>, state: web::Data<App
         .body(TEMPLATES.render("entries.html", &context).unwrap())
 }
 
-async fn meets_results_form_view(path: web::Path<MeetPath>, state: web::Data<AppState>) -> impl Responder {
+async fn meets_results_form_view(
+    path: web::Path<MeetPath>,
+    state: web::Data<AppState>,
+) -> impl Responder {
     let meet = find_meet(&state.get_ref().pool, &path.id).await;
 
     let mut context = Context::new();
@@ -227,9 +233,9 @@ async fn meet_view(path: web::Path<MeetPath>, state: web::Data<AppState>) -> imp
 async fn swimmers_view(state: web::Data<AppState>) -> impl Responder {
     let swimmers = sqlx::query(
         "
-            select id, name_first, name_last, gender, birth_date 
+            select id, first_name, last_name, gender, birth_date 
             from swimmer
-            order by name_first, name_last
+            order by first_name, last_name
         ",
     )
     .map(|row: PgRow| Swimmer {
@@ -282,7 +288,14 @@ async fn import_meet_entries(
             }
         }
         let elapsed = now.elapsed();
-        register_load(&state.get_ref().pool, swimmers, num_entries, elapsed, &path.id).await;
+        register_load(
+            &state.get_ref().pool,
+            swimmers,
+            num_entries,
+            elapsed,
+            &path.id,
+        )
+        .await;
         log::info!("Finished importing meet entries.")
     }
 
@@ -314,7 +327,7 @@ async fn import_swimmer(
 
     sqlx::query(
         "
-            insert into swimmer (id, name_first, name_last, gender, birth_date) 
+            insert into swimmer (id, first_name, last_name, gender, birth_date) 
             values ($1, $2, $3, $4, $5)
             on conflict do nothing
         ",
@@ -338,7 +351,7 @@ async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize, me
     let style = convert_style(event.split(' ').last().unwrap());
     let swimmer = Swimmer::new(swimmer_id.to_string());
     let meet = Meet::new(meet_id.to_string());
-    
+
     let mut swimmer_time: SwimmerTime = SwimmerTime {
         swimmer,
         style: style.to_string(),
@@ -360,7 +373,6 @@ async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize, me
         None => return,
     };
 
-
     if !best_time_short.is_empty() {
         let best_time_short_date = match NaiveDate::parse_from_str(row.get(13).unwrap(), "%b-%d-%y")
         {
@@ -379,11 +391,7 @@ async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize, me
         swimmer_time.time = time_to_miliseconds(best_time_short);
         swimmer_time.time_date = best_time_short_date;
 
-        import_time(
-            conn,
-            &swimmer_time,
-        )
-        .await;
+        import_time(conn, &swimmer_time).await;
     }
 
     let best_time_long = match row.get(14) {
@@ -413,20 +421,13 @@ async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize, me
     swimmer_time.time = time_to_miliseconds(best_time_long);
     swimmer_time.time_date = best_time_long_date;
 
-    import_time(
-        conn,
-        &swimmer_time,
-    )
-    .await;
+    import_time(conn, &swimmer_time).await;
 }
 
-async fn import_time(
-    conn: &PgPool,
-    swimmer_time: &SwimmerTime,
-) {
+async fn import_time(conn: &PgPool, swimmer_time: &SwimmerTime) {
     sqlx::query(
         "
-        insert into swimmer_time (swimmer, style, distance, course, time_official, time_date, meet)
+        insert into swimmer_time (swimmer, style, distance, course, official_time, date_time, meet)
         values ($1, $2, $3, $4, $5, $6, $7)
         on conflict do nothing
     ",
@@ -460,8 +461,8 @@ async fn register_load(
 
     sqlx::query(
         "
-            insert into entries_load (num_swimmers, num_entries, duration, swimmers, meet)
-            values ($1, $2, $3, $4, $5)
+            insert into import_history (num_swimmers, num_entries, duration, swimmers, meet, dataset)
+            values ($1, $2, $3, $4, $5, $6)
         ",
     )
     .bind(num_swimmers)
@@ -469,6 +470,7 @@ async fn register_load(
     .bind(duration.as_millis() as i32)
     .bind(ss)
     .bind(meet_id)
+    .bind("MEET_ENTRIES")
     .execute(conn)
     .await
     .expect("Error inserting a swimmer");
@@ -480,9 +482,9 @@ async fn search_swimmer_by_name(conn: &PgPool, name: String) -> Result<Swimmer, 
 
     sqlx::query(
         "
-        select id, name_first, name_last, gender, birth_date 
+        select id, first_name, last_name, gender, birth_date 
         from swimmer
-        where name_first = $1 and name_last = $2
+        where first_name = $1 and last_name = $2
     ",
     )
     .bind(first_name)
@@ -585,7 +587,8 @@ async fn import_meet_results(
                 let value = cell.inner_html();
 
                 match cell_idx {
-                    0 => { // the first column
+                    0 => {
+                        // the first column
                         if re_time.is_match(&value) {
                             let result_time = &value[..8];
                             swimmer_time.time = time_to_miliseconds(result_time);
@@ -601,7 +604,8 @@ async fn import_meet_results(
                             valid_row = false;
                         }
                     }
-                    2 => { // the third column
+                    2 => {
+                        // the third column
                         swimmer_time.swimmer.gender =
                             value.split(' ').next().unwrap().to_uppercase();
                         swimmer_time.distance = match value.split(' ').nth(1).unwrap().parse() {
@@ -706,10 +710,22 @@ async fn main() -> std::io::Result<()> {
             .route("/meets/new", web::get().to(meets_form_view))
             .route("/meets/new", web::post().to(meets_new))
             .route("/meets/{id}/", web::get().to(meet_view))
-            .route("/meets/{id}/entries", web::get().to(meets_entries_form_view))
-            .route("/meets/{id}/entries/load", web::post().to(import_meet_entries))
-            .route("/meets/{id}/results", web::get().to(meets_results_form_view))
-            .route("/meets/{id}/results/load", web::post().to(import_meet_results))
+            .route(
+                "/meets/{id}/entries",
+                web::get().to(meets_entries_form_view),
+            )
+            .route(
+                "/meets/{id}/entries/load",
+                web::post().to(import_meet_entries),
+            )
+            .route(
+                "/meets/{id}/results",
+                web::get().to(meets_results_form_view),
+            )
+            .route(
+                "/meets/{id}/results/load",
+                web::post().to(import_meet_results),
+            )
             .route("/swimmers", web::get().to(swimmers_view))
             .app_data(data_app_state.clone())
     })
