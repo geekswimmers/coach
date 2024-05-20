@@ -288,12 +288,13 @@ async fn import_meet_entries(
             }
         }
         let elapsed = now.elapsed();
-        register_load(
+        add_to_history(
             &state.get_ref().pool,
             swimmers,
             num_entries,
             elapsed,
             &path.id,
+            "MEET_ENTRIES",
         )
         .await;
         log::info!("Finished importing meet entries.")
@@ -444,12 +445,13 @@ async fn import_time(conn: &PgPool, swimmer_time: &SwimmerTime) {
     .expect("Error inserting swimmer's time");
 }
 
-async fn register_load(
+async fn add_to_history(
     conn: &PgPool,
     swimmers: HashSet<String>,
     num_entries: i32,
     duration: Duration,
     meet_id: &str,
+    dataset: &str,
 ) {
     let num_swimmers = swimmers.len() as i32;
     let mut ss: String = String::new();
@@ -470,7 +472,7 @@ async fn register_load(
     .bind(duration.as_millis() as i32)
     .bind(ss)
     .bind(meet_id)
-    .bind("MEET_ENTRIES")
+    .bind(dataset)
     .execute(conn)
     .await
     .expect("Error inserting a swimmer");
@@ -505,6 +507,10 @@ async fn import_meet_results(
     state: web::Data<AppState>,
     MultipartForm(form): MultipartForm<MeetResultsForm>,
 ) -> impl Responder {
+    let now = Instant::now();
+    let mut swimmers = HashSet::new();
+    let mut num_entries = 0;
+
     let meet = find_meet(&state.as_ref().pool, &path.id).await;
 
     let row_selector = Selector::parse(r#"table > tbody > tr"#).unwrap();
@@ -561,6 +567,8 @@ async fn import_meet_results(
                     {
                         Ok(s) => {
                             swimmer = s;
+                            swimmers.insert(swimmer.id.clone());
+                            num_entries += 1;
                             valid_swimmer = true;
                             name_row = true;
                         }
@@ -634,6 +642,17 @@ async fn import_meet_results(
             }
         }
     }
+
+    let elapsed = now.elapsed();
+    add_to_history(
+        &state.get_ref().pool,
+        swimmers,
+        num_entries,
+        elapsed,
+        &path.id,
+        "MEET_RESULTS",
+    )
+    .await;
 
     Redirect::to(format!("/meets/{}/", meet.id)).see_other()
 }
