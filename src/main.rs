@@ -14,6 +14,7 @@ use actix_web::web::Redirect;
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use chrono::{NaiveDate, ParseError};
 use coach::config::load_config;
+use coach::model::{Meet, Swimmer, SwimmerTime};
 use env_logger::Env;
 use regex::Regex;
 use scraper::{Html, Selector};
@@ -55,57 +56,6 @@ struct MeetResultsForm {
 #[derive(Serialize, Deserialize)]
 struct MeetForm {
     id: String,
-}
-
-#[derive(Serialize, Clone)]
-struct Swimmer {
-    id: String,
-    first_name: String,
-    last_name: String,
-    gender: String,
-    birth_date: NaiveDate,
-}
-
-impl Swimmer {
-    pub fn new(id: String) -> Self {
-        Self {
-            id,
-            first_name: String::new(),
-            last_name: String::new(),
-            gender: String::new(),
-            birth_date: NaiveDate::MIN,
-        }
-    }
-}
-
-#[derive(Serialize)]
-struct SwimmerTime {
-    swimmer: Swimmer,
-    style: String,
-    distance: i32,
-    course: String,
-    time: i32,
-    time_date: NaiveDate,
-    meet: Meet,
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-struct Meet {
-    id: String,
-    name: String,
-    start_date: NaiveDate,
-    end_date: NaiveDate,
-}
-
-impl Meet {
-    pub fn new(id: String) -> Self {
-        Self {
-            id,
-            name: String::new(),
-            start_date: NaiveDate::MIN,
-            end_date: NaiveDate::MAX,
-        }
-    }
 }
 
 #[derive(Deserialize)]
