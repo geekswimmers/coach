@@ -1,4 +1,11 @@
 {% extends "layout.html" %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item" aria-current="page"><a href="/meets">Meets</a></li>
+<li class="breadcrumb-item" aria-current="page"><a href="/meets/{{ meet.id }}/">{{ meet.name }}</a></li>
+<li class="breadcrumb-item active" aria-current="page">Meet Entries</li>
+{% endblock %}
+
 {% block content %}
     <h5 class="display-5">{{ meet.name }}</h5>
     <p class="lead">Loading Meet Entries</p>

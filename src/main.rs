@@ -190,8 +190,8 @@ async fn swimmers_view(state: web::Data<AppState>) -> impl Responder {
     )
     .map(|row: PgRow| Swimmer {
         id: row.get("id"),
-        first_name: row.get("name_first"),
-        last_name: row.get("name_last"),
+        first_name: row.get("first_name"),
+        last_name: row.get("last_name"),
         gender: row.get("gender"),
         birth_date: row.get("birth_date"),
     })
