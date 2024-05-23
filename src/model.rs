@@ -1,4 +1,4 @@
-use chrono::NaiveDate;
+use chrono::{NaiveDate, NaiveDateTime};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Clone)]
@@ -50,4 +50,16 @@ impl Meet {
             end_date: NaiveDate::MAX,
         }
     }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ImportHistory {
+    pub id: i32,
+    pub load_time: NaiveDateTime,
+    pub num_swimmers: i32,
+    pub num_entries: i32,
+    pub duration: i32,
+    pub swimmers: String,
+    pub meet: String,
+    pub dataset: String,
 }

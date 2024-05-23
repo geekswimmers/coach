@@ -14,13 +14,13 @@ use actix_web::web::Redirect;
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use chrono::{NaiveDate, ParseError};
 use coach::config::load_config;
-use coach::model::{Meet, Swimmer, SwimmerTime};
+use coach::model::{ImportHistory, Meet, Swimmer, SwimmerTime};
 use env_logger::Env;
 use regex::Regex;
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::{PgPool, PgRow};
-use sqlx::Row;
+use sqlx::{Error, Row};
 use tera::{Context, Tera};
 
 lazy_static! {
@@ -171,9 +171,22 @@ async fn find_meet(conn: &PgPool, meet_id: &str) -> Meet {
 
 async fn meet_view(path: web::Path<MeetPath>, state: web::Data<AppState>) -> impl Responder {
     let meet = find_meet(&state.get_ref().pool, &path.id).await;
+    let import_history = find_import_history(&state.get_ref().pool, &meet.id).await;
 
     let mut context = Context::new();
     context.insert("meet", &meet);
+
+    let mut entries_loaded = false;
+    let mut results_loaded = false;
+    match import_history {
+        Ok(ih) => {
+            entries_loaded = ih.iter().filter(|i| i.dataset == "MEET_ENTRIES").count() > 0;
+            results_loaded = ih.iter().filter(|i| i.dataset == "MEET_RESULTS").count() > 0;
+        },
+        Err(e) => log::error!("Error: {}", e)
+    }
+    context.insert("entries_loaded", &entries_loaded);
+    context.insert("results_loaded", &results_loaded);
 
     HttpResponse::Ok()
         .content_type("text/html; charset=utf-8")
@@ -426,6 +439,27 @@ async fn add_to_history(
     .execute(conn)
     .await
     .expect("Error inserting a swimmer");
+}
+
+async fn find_import_history(conn: &PgPool, meet_id: &str) -> Result<Vec<ImportHistory>, Error> {
+    sqlx::query("
+        select id, load_time, num_swimmers, num_entries, duration, swimmers, meet, dataset
+        from import_history
+        where meet = $1
+    ")
+        .bind(meet_id)
+        .map(|row: PgRow| ImportHistory{
+            id: row.get("id"),
+            load_time: row.get("load_time"),
+            num_swimmers: row.get("num_swimmers"),
+            num_entries: row.get("num_entries"),
+            duration: row.get("duration"),
+            swimmers: row.get("swimmers"),
+            meet: row.get("meet"),
+            dataset: row.get("dataset"),
+        })
+        .fetch_all(conn)
+        .await
 }
 
 async fn search_swimmer_by_name(conn: &PgPool, name: String) -> Result<Swimmer, sqlx::Error> {
