@@ -169,12 +169,34 @@ async fn find_meet(conn: &PgPool, meet_id: &str) -> Meet {
     .expect("Failed to fetch meet")
 }
 
+async fn find_meets_with_results(conn: &PgPool, except: &str) -> Vec<Meet> {
+    sqlx::query("
+        select m.id, m.name
+        from meet m
+	        left join import_history ih on m.id = ih.meet
+        where m.id <> $1
+            and ih.dataset = 'MEET_RESULTS'
+    ")
+        .bind(except)
+        .map(|row: PgRow| Meet {
+            id: row.get("id"),
+            name: row.get("name"),
+            start_date: row.get("start_date"),
+            end_date: row.get("end_date"),
+        })
+        .fetch_all(conn)
+        .await
+        .expect("Failed to fetch meets with entries")
+}
+
 async fn meet_view(path: web::Path<MeetPath>, state: web::Data<AppState>) -> impl Responder {
     let meet = find_meet(&state.get_ref().pool, &path.id).await;
     let import_history = find_import_history(&state.get_ref().pool, &meet.id).await;
+    let meets_with_results = find_meets_with_results(&state.get_ref().pool, &meet.id).await;
 
     let mut context = Context::new();
     context.insert("meet", &meet);
+    context.insert("meets_with_results", &meets_with_results);
 
     let mut entries_loaded = false;
     let mut results_loaded = false;

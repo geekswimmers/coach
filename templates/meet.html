@@ -30,7 +30,20 @@
         </div>
 
         <div class="card-body">
-            <p>From {{ meet.start_date | date(format="%B %e") }} to {{ meet.end_date | date(format="%B %e, %Y") }}</p>
+            <form id="compare-form" method="get">
+                <div class="mb-3">
+                    <label for="compare-to" class="form-label">Compare to</label>
+                    <select class="form-select" name="compare-to" id="compare-to" onchange="if (document.getElementById('compare-to').value !== '') { document.getElementById('compare-form').submit() } ">
+                        <option value="0">Best Times</option>
+                        <option value="">-- Meets --</option>
+                        {% for m in meets_with_results %}
+                            <option value="{{ m.id }}">{{ m.name }}</option>
+                        {% else %}
+                            <option value="">No meets with results</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </form>
         </div>
     </div>
 {% endblock %}
