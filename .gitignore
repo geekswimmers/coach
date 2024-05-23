@@ -19,3 +19,4 @@ target/
 *.xlsx
 config.yaml
 .vscode/
+.idea/
