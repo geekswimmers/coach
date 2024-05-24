@@ -14,13 +14,16 @@ use actix_web::web::Redirect;
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use chrono::{NaiveDate, ParseError};
 use coach::config::load_config;
-use coach::model::{ImportHistory, Meet, Swimmer, SwimmerTime};
+use coach::model::{Meet, Swimmer, SwimmerTime};
+use coach::repository::{
+    find_import_history, find_meet, find_meets_with_results, search_swimmer_by_name,
+};
 use env_logger::Env;
 use regex::Regex;
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::{PgPool, PgRow};
-use sqlx::{Error, Row};
+use sqlx::Row;
 use tera::{Context, Tera};
 
 lazy_static! {
@@ -149,46 +152,6 @@ async fn meets_new(form: web::Form<Meet>, state: web::Data<AppState>) -> impl Re
     Redirect::to(format!("/meets/{}/", form.id)).see_other()
 }
 
-async fn find_meet(conn: &PgPool, meet_id: &str) -> Meet {
-    sqlx::query(
-        "
-            select id, name, start_date, end_date 
-            from meet
-            where id = $1
-        ",
-    )
-    .bind(meet_id)
-    .map(|row: PgRow| Meet {
-        id: row.get("id"),
-        name: row.get("name"),
-        start_date: row.get("start_date"),
-        end_date: row.get("end_date"),
-    })
-    .fetch_one(conn)
-    .await
-    .expect("Failed to fetch meet")
-}
-
-async fn find_meets_with_results(conn: &PgPool, except: &str) -> Vec<Meet> {
-    sqlx::query("
-        select m.id, m.name
-        from meet m
-	        left join import_history ih on m.id = ih.meet
-        where m.id <> $1
-            and ih.dataset = 'MEET_RESULTS'
-    ")
-        .bind(except)
-        .map(|row: PgRow| Meet {
-            id: row.get("id"),
-            name: row.get("name"),
-            start_date: row.get("start_date"),
-            end_date: row.get("end_date"),
-        })
-        .fetch_all(conn)
-        .await
-        .expect("Failed to fetch meets with entries")
-}
-
 async fn meet_view(path: web::Path<MeetPath>, state: web::Data<AppState>) -> impl Responder {
     let meet = find_meet(&state.get_ref().pool, &path.id).await;
     let import_history = find_import_history(&state.get_ref().pool, &meet.id).await;
@@ -198,15 +161,17 @@ async fn meet_view(path: web::Path<MeetPath>, state: web::Data<AppState>) -> imp
     context.insert("meet", &meet);
     context.insert("meets_with_results", &meets_with_results);
 
-    let mut entries_loaded = false;
-    let mut results_loaded = false;
-    match import_history {
-        Ok(ih) => {
-            entries_loaded = ih.iter().filter(|i| i.dataset == "MEET_ENTRIES").count() > 0;
-            results_loaded = ih.iter().filter(|i| i.dataset == "MEET_RESULTS").count() > 0;
-        },
-        Err(e) => log::error!("Error: {}", e)
-    }
+    let entries_loaded = import_history
+        .iter()
+        .filter(|i| i.dataset == "MEET_ENTRIES")
+        .count()
+        > 0;
+    let results_loaded = import_history
+        .iter()
+        .filter(|i| i.dataset == "MEET_RESULTS")
+        .count()
+        > 0;
+
     context.insert("entries_loaded", &entries_loaded);
     context.insert("results_loaded", &results_loaded);
 
@@ -461,51 +426,6 @@ async fn add_to_history(
     .execute(conn)
     .await
     .expect("Error inserting a swimmer");
-}
-
-async fn find_import_history(conn: &PgPool, meet_id: &str) -> Result<Vec<ImportHistory>, Error> {
-    sqlx::query("
-        select id, load_time, num_swimmers, num_entries, duration, swimmers, meet, dataset
-        from import_history
-        where meet = $1
-    ")
-        .bind(meet_id)
-        .map(|row: PgRow| ImportHistory{
-            id: row.get("id"),
-            load_time: row.get("load_time"),
-            num_swimmers: row.get("num_swimmers"),
-            num_entries: row.get("num_entries"),
-            duration: row.get("duration"),
-            swimmers: row.get("swimmers"),
-            meet: row.get("meet"),
-            dataset: row.get("dataset"),
-        })
-        .fetch_all(conn)
-        .await
-}
-
-async fn search_swimmer_by_name(conn: &PgPool, name: String) -> Result<Swimmer, sqlx::Error> {
-    let first_name = name.split(' ').next();
-    let last_name = name.split(' ').nth(1);
-
-    sqlx::query(
-        "
-        select id, first_name, last_name, gender, birth_date 
-        from swimmer
-        where first_name = $1 and last_name = $2
-    ",
-    )
-    .bind(first_name)
-    .bind(last_name)
-    .map(|row: PgRow| Swimmer {
-        id: row.get("id"),
-        first_name: first_name.unwrap().trim().to_string(),
-        last_name: last_name.unwrap().trim().to_string(),
-        gender: row.get("gender"),
-        birth_date: row.get("birth_date"),
-    })
-    .fetch_one(conn)
-    .await
 }
 
 async fn import_meet_results(
