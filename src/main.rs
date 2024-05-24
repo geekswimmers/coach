@@ -311,6 +311,7 @@ async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize, me
         time: 0,
         time_date: NaiveDate::MAX,
         meet,
+        dataset: "MEET_ENTRIES".to_string(),
     };
 
     let best_time_short = match row.get(12) {
@@ -378,8 +379,8 @@ async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize, me
 async fn import_time(conn: &PgPool, swimmer_time: &SwimmerTime) {
     sqlx::query(
         "
-        insert into swimmer_time (swimmer, style, distance, course, official_time, date_time, meet)
-        values ($1, $2, $3, $4, $5, $6, $7)
+        insert into swimmer_time (swimmer, style, distance, course, official_time, date_time, meet. dataset)
+        values ($1, $2, $3, $4, $5, $6, $7, $8)
         on conflict do nothing
     ",
     )
@@ -390,6 +391,7 @@ async fn import_time(conn: &PgPool, swimmer_time: &SwimmerTime) {
     .bind(swimmer_time.time)
     .bind(swimmer_time.time_date)
     .bind(&swimmer_time.meet.id)
+    .bind(&swimmer_time.dataset)
     .execute(conn)
     .await
     .expect("Error inserting swimmer's time");
@@ -477,6 +479,7 @@ async fn import_meet_results(
                 time: 0,
                 time_date,
                 meet: meet.clone(),
+                dataset: "MEET_RESULTS".to_string(),
             };
 
             // Iterate over the <td> found within the <tr>.

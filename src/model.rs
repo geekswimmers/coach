@@ -31,6 +31,7 @@ pub struct SwimmerTime {
     pub time: i32,
     pub time_date: NaiveDate,
     pub meet: Meet,
+    pub dataset: String,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
