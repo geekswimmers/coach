@@ -40,6 +40,7 @@ pub struct Meet {
     pub name: String,
     pub start_date: NaiveDate,
     pub end_date: NaiveDate,
+    pub course: String,
 }
 
 impl Meet {
@@ -49,6 +50,7 @@ impl Meet {
             name: String::new(),
             start_date: NaiveDate::MIN,
             end_date: NaiveDate::MAX,
+            course: "SHORT".to_string(),
         }
     }
 }

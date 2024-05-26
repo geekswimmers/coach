@@ -77,7 +77,7 @@ async fn home_view() -> impl Responder {
 async fn meets_view(state: web::Data<AppState>) -> impl Responder {
     let meets = sqlx::query(
         "
-            select id, name, start_date, end_date 
+            select id, name, start_date, end_date, course
             from meet
             order by end_date desc
         ",
@@ -87,6 +87,7 @@ async fn meets_view(state: web::Data<AppState>) -> impl Responder {
         name: row.get("name"),
         start_date: row.get("start_date"),
         end_date: row.get("end_date"),
+        course: row.get("course"),
     })
     .fetch_all(&state.get_ref().pool)
     .await

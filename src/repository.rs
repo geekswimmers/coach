@@ -5,7 +5,7 @@ use sqlx::Row;
 pub async fn find_meet(conn: &PgPool, meet_id: &str) -> Meet {
     sqlx::query(
         "
-            select id, name, start_date, end_date
+            select id, name, start_date, end_date, course
             from meet
             where id = $1
         ",
@@ -16,6 +16,7 @@ pub async fn find_meet(conn: &PgPool, meet_id: &str) -> Meet {
         name: row.get("name"),
         start_date: row.get("start_date"),
         end_date: row.get("end_date"),
+        course: row.get("course"),
     })
     .fetch_one(conn)
     .await
@@ -25,7 +26,7 @@ pub async fn find_meet(conn: &PgPool, meet_id: &str) -> Meet {
 pub async fn find_meets_with_results(conn: &PgPool, except: &str) -> Vec<Meet> {
     sqlx::query(
         "
-        select m.id, m.name
+        select m.id, m.name, m.start_date, m.end_date, m.course
         from meet m
 	        left join import_history ih on m.id = ih.meet
         where m.id <> $1
@@ -38,6 +39,7 @@ pub async fn find_meets_with_results(conn: &PgPool, except: &str) -> Vec<Meet> {
         name: row.get("name"),
         start_date: row.get("start_date"),
         end_date: row.get("end_date"),
+        course: row.get("course"),
     })
     .fetch_all(conn)
     .await
