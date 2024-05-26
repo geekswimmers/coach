@@ -74,6 +74,7 @@ pub async fn find_import_history(conn: &PgPool, meet_id: &str) -> Vec<ImportHist
         select id, load_time, num_swimmers, num_entries, duration, swimmers, meet, dataset
         from import_history
         where meet = $1
+        order by load_time desc
     ",
     )
     .bind(meet_id)

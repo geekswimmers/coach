@@ -112,9 +112,16 @@ async fn meets_entries_form_view(
     state: web::Data<AppState>,
 ) -> impl Responder {
     let meet = find_meet(&state.get_ref().pool, &path.id).await;
+    let import_history = find_import_history(&state.get_ref().pool, &meet.id).await;
+    let meet_entries = import_history
+        .into_iter()
+        .filter(|ih| ih.dataset == *"MEET_ENTRIES")
+        .collect::<Vec<ImportHistory>>();
 
     let mut context = Context::new();
     context.insert("meet", &meet);
+    context.insert("import_history", &meet_entries);
+
     HttpResponse::Ok()
         .content_type("text/html; charset=utf-8")
         .body(TEMPLATES.render("entries.html", &context).unwrap())
