@@ -132,9 +132,16 @@ async fn meets_results_form_view(
     state: web::Data<AppState>,
 ) -> impl Responder {
     let meet = find_meet(&state.get_ref().pool, &path.id).await;
+    let import_history = find_import_history(&state.get_ref().pool, &meet.id).await;
+    let meet_results = import_history
+        .into_iter()
+        .filter(|ih| ih.dataset == *"MEET_RESULTS")
+        .collect::<Vec<ImportHistory>>();
 
     let mut context = Context::new();
     context.insert("meet", &meet);
+    context.insert("import_history", &meet_results);
+
     HttpResponse::Ok()
         .content_type("text/html; charset=utf-8")
         .body(TEMPLATES.render("results.html", &context).unwrap())
@@ -386,7 +393,7 @@ async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize, me
 async fn import_time(conn: &PgPool, swimmer_time: &SwimmerTime) {
     sqlx::query(
         "
-        insert into swimmer_time (swimmer, style, distance, course, official_time, date_time, meet. dataset)
+        insert into swimmer_time (swimmer, style, distance, course, official_time, date_time, meet, dataset)
         values ($1, $2, $3, $4, $5, $6, $7, $8)
         on conflict do nothing
     ",
@@ -504,7 +511,6 @@ async fn import_meet_results(
                         Ok(s) => {
                             swimmer = s;
                             swimmers.insert(swimmer.id.clone());
-                            num_entries += 1;
                             valid_swimmer = true;
                             name_row = true;
                         }
@@ -575,6 +581,7 @@ async fn import_meet_results(
 
             if valid_swimmer && !name_row && valid_row {
                 import_time(&state.as_ref().pool, &swimmer_time).await;
+                num_entries += 1;
             }
         }
     }

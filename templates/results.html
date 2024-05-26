@@ -28,6 +28,33 @@
                     Submit
                 </button>
             </form>
+
+            <hr>
+            <h3>History</h3>
+            <table class="table table-striped">
+                <thead>
+                <tr>
+                    <th scope="col">Load Time</th>
+                    <th scope="col">Num. Swimmers</th>
+                    <th scope="col">Num. Results</th>
+                    <th scope="col">Duration</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for ih in import_history %}
+                <tr>
+                    <td>{{ ih.load_time | date(format="%B %e, %Y") }}</td>
+                    <td>{{ ih.num_swimmers }}</td>
+                    <td>{{ ih.num_entries }}</td>
+                    <td>{{ ih.duration }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="4">No results loaded yet.</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
         </div>
     </div>
 {% endblock %}
