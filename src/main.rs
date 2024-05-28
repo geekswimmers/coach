@@ -315,7 +315,7 @@ async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize, me
     let event = row.get(9).unwrap();
     let distance: i32 = event.split(' ').next().unwrap().parse().unwrap();
     let style = convert_style(event.split(' ').last().unwrap());
-    let swimmer = Swimmer::new(swimmer_id.to_string());
+    let swimmer = Swimmer::new(swimmer_id.to_string(), String::new(), String::new());
     let meet = Meet::new(meet_id.to_string());
 
     let mut swimmer_time: SwimmerTime = SwimmerTime {

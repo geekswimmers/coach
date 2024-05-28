@@ -11,11 +11,11 @@ pub struct Swimmer {
 }
 
 impl Swimmer {
-    pub fn new(id: String) -> Self {
+    pub fn new(id: String, first_name: String, last_name: String) -> Self {
         Self {
             id,
-            first_name: String::new(),
-            last_name: String::new(),
+            first_name,
+            last_name,
             gender: String::new(),
             birth_date: NaiveDate::MIN,
         }
