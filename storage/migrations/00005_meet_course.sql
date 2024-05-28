@@ -1,0 +1,1 @@
+alter table meet add if not exists course varchar(10);
