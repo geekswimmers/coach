@@ -1,4 +1,4 @@
-use crate::model::{ImportHistory, Meet, Swimmer};
+use crate::model::{ImportHistory, Meet, Swimmer, SwimmerTime};
 use sqlx::postgres::{PgPool, PgRow};
 use sqlx::Row;
 
@@ -44,6 +44,47 @@ pub async fn find_meets_with_results(conn: &PgPool, except: &str) -> Vec<Meet> {
     .fetch_all(conn)
     .await
     .expect("Failed to fetch meets with entries")
+}
+
+pub async fn find_meet_swimmers(conn: &PgPool, import_history: &ImportHistory) -> Vec<SwimmerTime> {
+    let swimmers = import_history
+        .swimmers
+        .split(',')
+        .fold("''".to_string(), |acc, s| format!("{},'{}'", acc, s.trim()));
+
+    sqlx::query(
+        "
+        select s.id , s.first_name , s.last_name , st.style , st.distance , st.official_time , st.date_time
+        from swimmer_time st
+            join swimmer s on s.id = st.swimmer
+        where meet = $1
+            and st.dataset = $2
+            and st.course = $3
+            and st.swimmer in ($4)
+        order by st.style, st.distance, st.official_time
+        ",
+    )
+        .bind(&import_history.meet.id)
+        .bind(&import_history.dataset)
+        .bind(&import_history.meet.course)
+        .bind(swimmers)
+        .map(|row: PgRow| SwimmerTime {
+            swimmer: Swimmer::new(
+                row.get("id"),
+                row.get("first_name"),
+                row.get("last_name")
+            ),
+            style: row.get("style"),
+            distance: row.get("distance"),
+            course: import_history.meet.course.clone(),
+            time: row.get("official_time"),
+            time_date: row.get("date_time"),
+            meet: import_history.meet.clone(),
+            dataset: import_history.dataset.clone(),
+        })
+        .fetch_all(conn)
+        .await
+        .expect("Failed to fetch meet entry swimmers")
 }
 
 pub async fn search_swimmer_by_name(conn: &PgPool, name: String) -> Result<Swimmer, sqlx::Error> {

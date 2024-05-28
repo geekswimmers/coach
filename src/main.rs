@@ -16,8 +16,8 @@ use chrono::{NaiveDate, ParseError};
 use coach::config::load_config;
 use coach::model::{ImportHistory, Meet, Swimmer, SwimmerTime};
 use coach::repository::{
-    find_import_history, find_latest_imported_swimmers, find_meet, find_meet_swimmers,
-    find_meets_with_results, search_swimmer_by_name,
+    find_import_history, find_latest_imported_swimmers, find_meet, find_meets_with_results,
+    search_swimmer_by_name,
 };
 use env_logger::Env;
 use regex::Regex;
