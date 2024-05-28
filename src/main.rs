@@ -14,9 +14,10 @@ use actix_web::web::Redirect;
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use chrono::{NaiveDate, ParseError};
 use coach::config::load_config;
-use coach::model::{Meet, Swimmer, SwimmerTime};
+use coach::model::{ImportHistory, Meet, Swimmer, SwimmerTime};
 use coach::repository::{
-    find_import_history, find_meet, find_meets_with_results, search_swimmer_by_name,
+    find_import_history, find_latest_imported_swimmers, find_meet, find_meet_swimmers,
+    find_meets_with_results, search_swimmer_by_name,
 };
 use env_logger::Env;
 use regex::Regex;
@@ -169,13 +170,9 @@ async fn meets_new(form: web::Form<Meet>, state: web::Data<AppState>) -> impl Re
 
 async fn meet_view(path: web::Path<MeetPath>, state: web::Data<AppState>) -> impl Responder {
     let meet = find_meet(&state.get_ref().pool, &path.id).await;
-    let import_history = find_import_history(&state.get_ref().pool, &meet.id).await;
     let meets_with_results = find_meets_with_results(&state.get_ref().pool, &meet.id).await;
 
-    let mut context = Context::new();
-    context.insert("meet", &meet);
-    context.insert("meets_with_results", &meets_with_results);
-
+    let import_history = find_latest_imported_swimmers(&state.get_ref().pool, &meet.id).await;
     let entries_loaded = import_history
         .iter()
         .filter(|i| i.dataset == "MEET_ENTRIES")
@@ -187,6 +184,18 @@ async fn meet_view(path: web::Path<MeetPath>, state: web::Data<AppState>) -> imp
         .count()
         > 0;
 
+    let _entries_swimmers = import_history
+        .iter()
+        .find(|i| i.dataset == "MEET_ENTRIES")
+        .expect("No entries swimmers");
+    let _results_swimmers = import_history
+        .iter()
+        .find(|i| i.dataset == "MEET_RESULTS")
+        .expect("No result swimmers");
+
+    let mut context = Context::new();
+    context.insert("meet", &meet);
+    context.insert("meets_with_results", &meets_with_results);
     context.insert("entries_loaded", &entries_loaded);
     context.insert("results_loaded", &results_loaded);
 

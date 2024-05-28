@@ -63,6 +63,6 @@ pub struct ImportHistory {
     pub num_entries: i32,
     pub duration: i32,
     pub swimmers: String,
-    pub meet: String,
+    pub meet: Meet,
     pub dataset: String,
 }

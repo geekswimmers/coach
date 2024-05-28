@@ -87,10 +87,41 @@ pub async fn find_import_history(conn: &PgPool, meet_id: &str) -> Vec<ImportHist
         num_entries: row.get("num_entries"),
         duration: row.get("duration"),
         swimmers: row.get("swimmers"),
-        meet: row.get("meet"),
+        meet: Meet::new(row.get("meet")),
         dataset: row.get("dataset"),
     })
     .fetch_all(conn)
     .await
     .expect("Error finding import history")
+}
+
+pub async fn find_latest_imported_swimmers(conn: &PgPool, meet_id: &str) -> Vec<ImportHistory> {
+    sqlx::query("
+        select id, load_time, num_swimmers, num_entries, duration, swimmers, meet, dataset
+        from import_history
+        where meet = $1
+        	and dataset = 'MEET_ENTRIES'
+        	and load_time >= (select max(load_time) from import_history where meet = $1 and dataset = 'MEET_ENTRIES')
+        union
+        select id, load_time, num_swimmers, num_entries, duration, swimmers, meet, dataset
+        from import_history
+        where meet = $1
+        	and dataset = 'MEET_RESULTS'
+        	and load_time >= (select max(load_time) from import_history where meet = $1 and dataset = 'MEET_RESULTS')
+        order by load_time desc
+    ")
+        .bind(meet_id)
+        .map(|row| ImportHistory {
+            id: row.get("id"),
+            load_time: row.get("load_time"),
+            num_swimmers: row.get("num_swimmers"),
+            num_entries: row.get("num_entries"),
+            duration: row.get("duration"),
+            swimmers: row.get("swimmers"),
+            meet: Meet::new(row.get("meet")),
+            dataset: row.get("dataset"),
+        })
+        .fetch_all(conn)
+        .await
+        .expect("Error finding imported swimmers")
 }
