@@ -1,5 +1,12 @@
 use chrono::{NaiveDate, NaiveDateTime};
 use serde::{Deserialize, Serialize};
+use sqlx::PgPool;
+use tera::Tera;
+
+pub struct AppState {
+    pub pool: PgPool,
+    pub template: Tera,
+}
 
 #[derive(Serialize, Clone)]
 pub struct Swimmer {

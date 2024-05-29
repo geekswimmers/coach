@@ -14,7 +14,7 @@ use actix_web::web::Redirect;
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use chrono::{NaiveDate, ParseError};
 use coach::config::load_config;
-use coach::model::{ImportHistory, Meet, Swimmer, SwimmerTime};
+use coach::model::{AppState, ImportHistory, Meet, Swimmer, SwimmerTime};
 use coach::repository::{
     find_import_history, find_latest_imported_swimmers, find_meet, find_meets_with_results,
     search_swimmer_by_name,
@@ -26,6 +26,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::postgres::{PgPool, PgRow};
 use sqlx::Row;
 use tera::{Context, Tera};
+use coach::controller::{home_view, meets_form_view};
 
 lazy_static! {
     pub static ref TEMPLATES: Tera = {
@@ -39,10 +40,6 @@ lazy_static! {
         let _ = tera.full_reload();
         tera
     };
-}
-
-struct AppState {
-    pool: PgPool,
 }
 
 #[derive(Debug, MultipartForm)]
@@ -65,14 +62,6 @@ struct MeetForm {
 #[derive(Deserialize)]
 struct MeetPath {
     id: String,
-}
-
-async fn home_view() -> impl Responder {
-    let context = Context::new();
-
-    HttpResponse::Ok()
-        .content_type("text/html; charset=utf-8")
-        .body(TEMPLATES.render("index.html", &context).unwrap())
 }
 
 async fn meets_view(state: web::Data<AppState>) -> impl Responder {
@@ -100,13 +89,6 @@ async fn meets_view(state: web::Data<AppState>) -> impl Responder {
     HttpResponse::Ok()
         .content_type("text/html; charset=utf-8")
         .body(TEMPLATES.render("meets.html", &context).unwrap())
-}
-
-async fn meets_form_view() -> impl Responder {
-    let context = Context::new();
-    HttpResponse::Ok()
-        .content_type("text/html; charset=utf-8")
-        .body(TEMPLATES.render("meet_form.html", &context).unwrap())
 }
 
 async fn meets_entries_form_view(
@@ -670,7 +652,10 @@ async fn main() -> std::io::Result<()> {
         .await
         .expect("Failed to migrate database");
 
-    let app_state = AppState { pool };
+    let app_state = AppState {
+        pool,
+        template: TEMPLATES.clone()
+    };
     let data_app_state = web::Data::new(app_state);
 
     HttpServer::new(move || {
