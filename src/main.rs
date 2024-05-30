@@ -14,11 +14,11 @@ use actix_web::web::Redirect;
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use chrono::{NaiveDate, ParseError};
 use coach::config::load_config;
-use coach::controller::{home_view, meets_form_view};
+use coach::controller::{home_view, meet_view, MeetPath, meets_form_view};
 use coach::model::{AppState, ImportHistory, Meet, Swimmer, SwimmerTime};
 use coach::repository::{
-    find_all_meets, find_all_swimmers, find_import_history, find_latest_imported_swimmers,
-    find_meet, find_meets_with_results, search_swimmer_by_name,
+    find_all_meets, find_all_swimmers, find_import_history,
+    find_meet, search_swimmer_by_name,
 };
 use env_logger::Env;
 use regex::Regex;
@@ -55,11 +55,6 @@ struct MeetResultsForm {
 
 #[derive(Serialize, Deserialize)]
 struct MeetForm {
-    id: String,
-}
-
-#[derive(Deserialize)]
-struct MeetPath {
     id: String,
 }
 
@@ -131,42 +126,6 @@ async fn meets_new(form: web::Form<Meet>, state: web::Data<AppState>) -> impl Re
     .expect("Error inserting a meet.");
 
     Redirect::to(format!("/meets/{}/", form.id)).see_other()
-}
-
-async fn meet_view(path: web::Path<MeetPath>, state: web::Data<AppState>) -> impl Responder {
-    let meet = find_meet(&state.get_ref().pool, &path.id).await;
-    let meets_with_results = find_meets_with_results(&state.get_ref().pool, &meet.id).await;
-
-    let import_history = find_latest_imported_swimmers(&state.get_ref().pool, &meet.id).await;
-    let entries_loaded = import_history
-        .iter()
-        .filter(|i| i.dataset == "MEET_ENTRIES")
-        .count()
-        > 0;
-    let results_loaded = import_history
-        .iter()
-        .filter(|i| i.dataset == "MEET_RESULTS")
-        .count()
-        > 0;
-
-    let _entries_swimmers = import_history
-        .iter()
-        .find(|i| i.dataset == "MEET_ENTRIES")
-        .expect("No entries swimmers");
-    let _results_swimmers = import_history
-        .iter()
-        .find(|i| i.dataset == "MEET_RESULTS")
-        .expect("No result swimmers");
-
-    let mut context = Context::new();
-    context.insert("meet", &meet);
-    context.insert("meets_with_results", &meets_with_results);
-    context.insert("entries_loaded", &entries_loaded);
-    context.insert("results_loaded", &results_loaded);
-
-    HttpResponse::Ok()
-        .content_type("text/html; charset=utf-8")
-        .body(TEMPLATES.render("meet.html", &context).unwrap())
 }
 
 async fn swimmers_view(state: web::Data<AppState>) -> impl Responder {
@@ -634,22 +593,10 @@ async fn main() -> std::io::Result<()> {
             .route("/meets/new", web::get().to(meets_form_view))
             .route("/meets/new", web::post().to(meets_new))
             .route("/meets/{id}/", web::get().to(meet_view))
-            .route(
-                "/meets/{id}/entries",
-                web::get().to(meets_entries_form_view),
-            )
-            .route(
-                "/meets/{id}/entries/load",
-                web::post().to(import_meet_entries),
-            )
-            .route(
-                "/meets/{id}/results",
-                web::get().to(meets_results_form_view),
-            )
-            .route(
-                "/meets/{id}/results/load",
-                web::post().to(import_meet_results),
-            )
+            .route("/meets/{id}/entries", web::get().to(meets_entries_form_view))
+            .route("/meets/{id}/entries/load", web::post().to(import_meet_entries))
+            .route("/meets/{id}/results", web::get().to(meets_results_form_view))
+            .route("/meets/{id}/results/load", web::post().to(import_meet_results))
             .route("/swimmers", web::get().to(swimmers_view))
             .app_data(data_app_state.clone())
     })
