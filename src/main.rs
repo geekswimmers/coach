@@ -14,19 +14,18 @@ use actix_web::web::Redirect;
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use chrono::{NaiveDate, ParseError};
 use coach::config::load_config;
+use coach::controller::{home_view, meets_form_view};
 use coach::model::{AppState, ImportHistory, Meet, Swimmer, SwimmerTime};
 use coach::repository::{
-    find_import_history, find_latest_imported_swimmers, find_meet, find_meets_with_results,
-    search_swimmer_by_name,
+    find_all_meets, find_all_swimmers, find_import_history, find_latest_imported_swimmers,
+    find_meet, find_meets_with_results, search_swimmer_by_name,
 };
 use env_logger::Env;
 use regex::Regex;
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
-use sqlx::postgres::{PgPool, PgRow};
-use sqlx::Row;
+use sqlx::postgres::PgPool;
 use tera::{Context, Tera};
-use coach::controller::{home_view, meets_form_view};
 
 lazy_static! {
     pub static ref TEMPLATES: Tera = {
@@ -65,23 +64,7 @@ struct MeetPath {
 }
 
 async fn meets_view(state: web::Data<AppState>) -> impl Responder {
-    let meets = sqlx::query(
-        "
-            select id, name, start_date, end_date, course
-            from meet
-            order by end_date desc
-        ",
-    )
-    .map(|row: PgRow| Meet {
-        id: row.get("id"),
-        name: row.get("name"),
-        start_date: row.get("start_date"),
-        end_date: row.get("end_date"),
-        course: row.get("course"),
-    })
-    .fetch_all(&state.get_ref().pool)
-    .await
-    .expect("Failed to fetch meets");
+    let meets = find_all_meets(&state.get_ref().pool).await;
 
     let mut context = Context::new();
     context.insert("meets", &meets);
@@ -187,23 +170,7 @@ async fn meet_view(path: web::Path<MeetPath>, state: web::Data<AppState>) -> imp
 }
 
 async fn swimmers_view(state: web::Data<AppState>) -> impl Responder {
-    let swimmers = sqlx::query(
-        "
-            select id, first_name, last_name, gender, birth_date 
-            from swimmer
-            order by first_name, last_name
-        ",
-    )
-    .map(|row: PgRow| Swimmer {
-        id: row.get("id"),
-        first_name: row.get("first_name"),
-        last_name: row.get("last_name"),
-        gender: row.get("gender"),
-        birth_date: row.get("birth_date"),
-    })
-    .fetch_all(&state.get_ref().pool)
-    .await
-    .expect("Failed to fetch swimmers");
+    let swimmers = find_all_swimmers(&state.get_ref().pool).await;
 
     let mut context = Context::new();
     context.insert("swimmers", &swimmers);
@@ -654,7 +621,7 @@ async fn main() -> std::io::Result<()> {
 
     let app_state = AppState {
         pool,
-        template: TEMPLATES.clone()
+        template: TEMPLATES.clone(),
     };
     let data_app_state = web::Data::new(app_state);
 
