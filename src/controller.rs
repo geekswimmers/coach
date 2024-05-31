@@ -1,5 +1,5 @@
 use crate::model::AppState;
-use crate::repository::{find_latest_imported_swimmers, find_meet, find_meets_with_results};
+use crate::repository::{find_latest_imported_swimmers, find_meet, find_meet_swimmers, find_meets_with_results};
 use actix_web::{web, HttpResponse, Responder};
 use serde::Deserialize;
 use tera::Context;
@@ -43,16 +43,18 @@ pub async fn meet_view(path: web::Path<MeetPath>, state: web::Data<AppState>) ->
         .iter()
         .find(|i| i.dataset == "MEET_ENTRIES")
         .expect("No entries swimmers");
-    let _results_swimmers = import_history
+    let meet_results_history = import_history
         .iter()
         .find(|i| i.dataset == "MEET_RESULTS")
         .expect("No result swimmers");
+    let result_swimmers = find_meet_swimmers(&state.get_ref().pool, meet_results_history).await;
 
     let mut context = Context::new();
     context.insert("meet", &meet);
     context.insert("meets_with_results", &meets_with_results);
     context.insert("entries_loaded", &entries_loaded);
     context.insert("results_loaded", &results_loaded);
+    context.insert("result_swimmers", &result_swimmers);
 
     HttpResponse::Ok()
         .content_type("text/html; charset=utf-8")

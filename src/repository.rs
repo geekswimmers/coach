@@ -92,25 +92,28 @@ pub async fn find_meet_swimmers(conn: &PgPool, import_history: &ImportHistory) -
         .split(',')
         .fold("''".to_string(), |acc, s| format!("{},'{}'", acc, s.trim()));
 
-    sqlx::query(
-        "
+    let sql = format!("
             select s.id, s.first_name, s.last_name,
                    st.style, st.distance, st.official_time, st.date_time
             from swimmer_time st
                 join swimmer s on s.id = st.swimmer
-            where meet = $1
+            where st.meet = $1
                 and st.dataset = $2
                 and st.course = $3
-                and st.swimmer in ($4)
-            order by st.style, st.distance, st.official_time
-        ",
-    )
+                and st.swimmer in ({swimmers})
+            order by s.first_name, s.last_name, st.style, st.distance, st.official_time
+        ");
+
+    sqlx::query(sql.as_str())
     .bind(&import_history.meet.id)
     .bind(&import_history.dataset)
     .bind(&import_history.meet.course)
-    .bind(swimmers)
     .map(|row: PgRow| SwimmerTime {
-        swimmer: Swimmer::new(row.get("id"), row.get("first_name"), row.get("last_name")),
+        swimmer: Swimmer::new(
+            row.get("id"),
+            row.get("first_name"),
+            row.get("last_name")
+        ),
         style: row.get("style"),
         distance: row.get("distance"),
         course: import_history.meet.course.clone(),
@@ -151,10 +154,11 @@ pub async fn search_swimmer_by_name(conn: &PgPool, name: String) -> Result<Swimm
 pub async fn find_import_history(conn: &PgPool, meet_id: &str) -> Vec<ImportHistory> {
     sqlx::query(
         "
-            select id, load_time, num_swimmers, num_entries, duration, swimmers, meet, dataset
-            from import_history
-            where meet = $1
-            order by load_time desc
+            select ih.id, ih.load_time, ih.num_swimmers, ih.num_entries, ih.duration, ih.swimmers, ih.meet, ih.course, ih.dataset
+            from import_history ih
+                join meet m on m.id = ih.meet
+            where ih.meet = $1
+            order by ih.load_time desc
         ",
     )
     .bind(meet_id)
@@ -165,7 +169,7 @@ pub async fn find_import_history(conn: &PgPool, meet_id: &str) -> Vec<ImportHist
         num_entries: row.get("num_entries"),
         duration: row.get("duration"),
         swimmers: row.get("swimmers"),
-        meet: Meet::new(row.get("meet")),
+        meet: Meet::new(row.get("meet"), row.get("course")),
         dataset: row.get("dataset"),
     })
     .fetch_all(conn)
@@ -176,18 +180,19 @@ pub async fn find_import_history(conn: &PgPool, meet_id: &str) -> Vec<ImportHist
 pub async fn find_latest_imported_swimmers(conn: &PgPool, meet_id: &str) -> Vec<ImportHistory> {
     sqlx::query(
         "
-            select id, load_time, num_swimmers, num_entries, duration, swimmers, meet, dataset
-            from import_history
-            where meet = $1
-        	    and dataset = 'MEET_ENTRIES'
-        	    and load_time >= (select max(load_time) from import_history where meet = $1 and dataset = 'MEET_ENTRIES')
+            select ih.id, ih.load_time, ih.num_swimmers, ih.num_entries, ih.duration, ih.swimmers, ih.meet, m.course, ih.dataset
+            from import_history ih
+                join meet m on m.id = ih.meet
+            where ih.meet = $1
+        	    and ih.dataset = 'MEET_ENTRIES'
+        	    and ih.load_time >= (select max(load_time) from import_history where meet = $1 and dataset = 'MEET_ENTRIES')
             union
-            select id, load_time, num_swimmers, num_entries, duration, swimmers, meet, dataset
-            from import_history
-            where meet = $1
-        	    and dataset = 'MEET_RESULTS'
-        	    and load_time >= (select max(load_time) from import_history where meet = $1 and dataset = 'MEET_RESULTS')
-            order by load_time desc
+            select ih.id, ih.load_time, ih.num_swimmers, ih.num_entries, ih.duration, ih.swimmers, ih.meet, m.course, ih.dataset
+            from import_history ih
+                join meet m on m.id = ih.meet
+            where ih.meet = $1
+        	    and ih.dataset = 'MEET_RESULTS'
+        	    and ih.load_time >= (select max(load_time) from import_history where meet = $1 and dataset = 'MEET_RESULTS')
         ",
     )
     .bind(meet_id)
@@ -198,7 +203,7 @@ pub async fn find_latest_imported_swimmers(conn: &PgPool, meet_id: &str) -> Vec<
         num_entries: row.get("num_entries"),
         duration: row.get("duration"),
         swimmers: row.get("swimmers"),
-        meet: Meet::new(row.get("meet")),
+        meet: Meet::new(row.get("meet"), row.get("course")),
         dataset: row.get("dataset"),
     })
     .fetch_all(conn)

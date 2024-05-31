@@ -233,7 +233,7 @@ async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize, me
     let distance: i32 = event.split(' ').next().unwrap().parse().unwrap();
     let style = convert_style(event.split(' ').last().unwrap());
     let swimmer = Swimmer::new(swimmer_id.to_string(), String::new(), String::new());
-    let meet = Meet::new(meet_id.to_string());
+    let meet = Meet::new(meet_id.to_string(), String::new());
 
     let mut swimmer_time: SwimmerTime = SwimmerTime {
         swimmer,
@@ -272,6 +272,7 @@ async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize, me
         };
 
         swimmer_time.course = "SHORT".to_string();
+        swimmer_time.meet.course = "SHORT".to_string();
         swimmer_time.time = time_to_miliseconds(best_time_short);
         swimmer_time.time_date = best_time_short_date;
 
@@ -302,6 +303,7 @@ async fn import_times(conn: &PgPool, row: &csv::StringRecord, row_num: usize, me
     };
 
     swimmer_time.course = "LONG".to_string();
+    swimmer_time.meet.course = "LONG".to_string();
     swimmer_time.time = time_to_miliseconds(best_time_long);
     swimmer_time.time_date = best_time_long_date;
 

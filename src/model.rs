@@ -51,13 +51,13 @@ pub struct Meet {
 }
 
 impl Meet {
-    pub fn new(id: String) -> Self {
+    pub fn new(id: String, course: String) -> Self {
         Self {
             id,
             name: String::new(),
             start_date: NaiveDate::MIN,
             end_date: NaiveDate::MAX,
-            course: "SHORT".to_string(),
+            course,
         }
     }
 }

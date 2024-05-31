@@ -44,6 +44,27 @@
                     </select>
                 </div>
             </form>
+
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th scope="col">Swimmer</th>
+                        <th scope="col">Event</th>
+                        <th scope="col">Result</th>
+                        <th scope="col">Compare to</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for st in result_swimmers %}
+                        <tr>
+                            <th scope="row">{{ st.swimmer.first_name }} {{ st.swimmer.last_name }}</th>
+                            <td>{{ st.distance }}m</td>
+                            <td>{{ st.style }}</td>
+                            <td>{{ st.time }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
     </div>
 {% endblock %}
